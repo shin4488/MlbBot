@@ -47,7 +47,7 @@ namespace TwitterMlbBot
             catch (TwitterException e)
             {
                 // CoreTweetに関するエラー。
-                twitter.ExecuteTweet(_tweetedErrorMessage);
+                Console.WriteLine(e.Message);
             }
             catch (Exception e)
             {
