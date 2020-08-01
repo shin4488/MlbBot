@@ -19,7 +19,8 @@ namespace TwitterMlbBot.Mlb
         {
             // WebAPI認証用データ取得
             Dictionary<string, string> apiKeyConfig = ProcessUtility.ReadAppConfig("mlb");
-            _apiKey = apiKeyConfig["apiKey"];
+            // AWSのlambda関数使用時はApp.configの値がnullとなるためnullチェックを入れる
+            _apiKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "apiKey", "MLB_API_KEY");
         }
 
         /// <summary>

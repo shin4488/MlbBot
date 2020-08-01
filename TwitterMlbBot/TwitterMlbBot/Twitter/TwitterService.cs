@@ -7,7 +7,8 @@ namespace TwitterMlbBot.Twitter
 {
     class TwitterService
     {
-        private const int _paddingWidth = 13;
+        private const int _teamNamePadding = 12;
+        private const int _digitPadding = 2;
         private readonly string _consumerKey;
         private readonly string _consumerSecret;
         private readonly string _accessKey;
@@ -21,10 +22,11 @@ namespace TwitterMlbBot.Twitter
         {
             // WebAPI認証用データ取得
             Dictionary<string, string> apiKeyConfig = ProcessUtility.ReadAppConfig("twitter");
-            _consumerKey = apiKeyConfig["consumerKey"];
-            _consumerSecret = apiKeyConfig["consumerSecret"];
-            _accessKey = apiKeyConfig["accessKey"];
-            _accessSecret = apiKeyConfig["accessSecret"];
+            // AWSのlambda関数使用時はApp.configの値がnullとなるためnullチェックを入れる
+            _consumerKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerKey", "CONSUMER_KEY");
+            _consumerSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerSecret", "CONSUMER_SECRET");
+            _accessKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessKey", "ACCESS_KEY");
+            _accessSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessSecret", "ACCESS_SECRET");
             // Twitter認証
             _tokens = Tokens.Create(_consumerKey, _consumerSecret, _accessKey, _accessSecret);
         }
@@ -45,18 +47,20 @@ namespace TwitterMlbBot.Twitter
                 List<string> messagesByTeam = teamsByKey.Teams
                     .Select(team =>
                     {
-                        // ツイート文は「<順位> : <チーム名> : <ゲーム差>」
+                        // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
                         string teamTweetMessage =
                             team.Ranking.ToString() + "  : " +
-                            team.Name.PadRight(_paddingWidth) + ": " +
+                            team.Name.PadRight(_teamNamePadding) + " : " +
+                            team.Wins.ToString().PadRight(_digitPadding) + " : " +
+                            team.Losses.ToString().PadRight(_digitPadding) + " : " +
                             team.GamesBehind.ToString();
                         return teamTweetMessage;
                     }).ToList();
 
                 string tweetMessage =
-                    // リーグ名 : 地区名
+                    // リーグ名 : 地区名 : Wins : Losses : GamesBehind
                     teamsByKey.Key.League + " : " +
-                    teamsByKey.Key.Division + "\n" +
+                    teamsByKey.Key.Division + " (Win : Loss : Behind)\n" +
                     // チーム順位
                     string.Join('\n', messagesByTeam) + "\n" +
                     // タグ付けメッセージ

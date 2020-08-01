@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace TwitterMlbBot
 {
-    class Program
+    public class Program
     {
         private const string _tweetedErrorMessage = "Sorry. Currently this bot is getting drunk.";
         private static IMapper _mapper;
@@ -21,7 +21,7 @@ namespace TwitterMlbBot
         /// </summary>
         /// <param name="args"></param>
         /// <returns></returns>
-        static async Task Main(string[] args)
+        public static async Task Main(string[] args)
         {
             CreateMapping();
             TwitterService twitter = new TwitterService();
@@ -51,6 +51,7 @@ namespace TwitterMlbBot
             }
             catch (Exception e)
             {
+                Console.WriteLine(e.ToString());
                 // 接続エラー発生時にエラーメッセージをツイート
                 twitter.ExecuteTweet(_tweetedErrorMessage);
             }

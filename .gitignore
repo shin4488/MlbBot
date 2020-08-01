@@ -2,3 +2,6 @@
 obj
 bin
 App.config
+aws-lambda-tools-defaults.json
+TwitterMlbBotExecution.Tests
+TwitterMlbBot.zip

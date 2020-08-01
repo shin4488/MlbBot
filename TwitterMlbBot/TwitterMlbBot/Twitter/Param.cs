@@ -60,6 +60,16 @@ namespace TwitterMlbBot.Twitter
         public string Name { get; set; }
 
         /// <summary>
+        /// 勝ち数
+        /// </summary>
+        public int? Wins { get; set; }
+
+        /// <summary>
+        /// 負け数
+        /// </summary>
+        public int? Losses { get; set; }
+
+        /// <summary>
         /// 1つ上の順位のチームとのゲーム差
         /// </summary>
         public float? GamesBehind { get; set; }

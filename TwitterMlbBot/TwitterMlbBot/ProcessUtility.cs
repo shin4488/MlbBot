@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Net.Http;
@@ -54,7 +55,22 @@ namespace TwitterMlbBot
         public static Dictionary<string, string> ReadAppConfig(string identifier)
         {
             string config = ConfigurationManager.AppSettings[identifier];
-            return JsonConvert.DeserializeObject<Dictionary<string, string>>(config);
+            // AWSのlambda関数で実行するとconfigがnullとなるため、nullチェックを入れる
+            return config == null ? null : JsonConvert.DeserializeObject<Dictionary<string, string>>(config);
+        }
+
+        /// <summary>
+        /// 入力値がnullであればAWSの環境変数を返却、入力値がnullでなければキーを指定して値を取得・返却
+        /// </summary>
+        /// <param name="value">入力値</param>
+        /// <returns></returns>
+        public static string GetEnvVarByKey(Dictionary<string, string> config, string configKey, string envrinmentVariable)
+        {
+            // 環境変数はAWSのlambda関数側で設定
+            return config == null
+                   ? Environment.GetEnvironmentVariable(envrinmentVariable)
+                   : config[configKey]
+                   ;
         }
     }
 }
