@@ -29,7 +29,7 @@ namespace TwitterMlbBot
             try
             {
                 // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
-                int year = args.Length != 0 && int.TryParse(args[0], out int inputYear)
+                int year = args?.Length > 0 && int.TryParse(args[0], out int inputYear)
                     ? inputYear
                     : DateTime.Now.Year
                     ;

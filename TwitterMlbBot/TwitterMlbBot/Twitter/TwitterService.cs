@@ -37,9 +37,11 @@ namespace TwitterMlbBot.Twitter
         /// <param name="param">データ</param>
         public void CreateTweet(Param param)
         {
+            List<string> targetTweetContentList = new List<string>();
+
             // 最初に今日の日付のみツイートする
             string todayDate = DateTime.Now.ToShortDateString();
-            Status dateTweetStatus = ExecuteTweet(todayDate);
+            targetTweetContentList.Add(todayDate);
 
             foreach (ParamByKey teamsByKey in param.TeamsList)
             {
@@ -66,8 +68,17 @@ namespace TwitterMlbBot.Twitter
                     // タグ付けメッセージ
                     teamsByKey.TagMessage;
 
-                // 地区ごとにツイート
-                Status standingsTweetStatus = ExecuteTweet(tweetMessage);
+                // 地区ごとにツイート対象を保持
+                targetTweetContentList.Add(tweetMessage);
+            }
+
+            // 順位データが存在する場合のみ、一斉にツイート実行
+            // 順位データが存在しない場合は、日付データのみリストに保持されているため、要素数1となる
+            if (targetTweetContentList.Count > 1)
+            {
+                targetTweetContentList.ForEach(x => {
+                    Status standingsTweetStatus = ExecuteTweet(x);
+                });
             }
         }
 

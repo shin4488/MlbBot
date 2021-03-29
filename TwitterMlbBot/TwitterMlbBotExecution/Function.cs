@@ -11,7 +11,6 @@ namespace TwitterMlbBotExecution
 {
     public class Function
     {
-        
         /// <summary>
         /// A simple function that takes a string and does a ToUpper
         /// </summary>
@@ -23,7 +22,8 @@ namespace TwitterMlbBotExecution
             Console.WriteLine(input);
             Console.WriteLine(context);
             // TwitterMlbBot側のプログラムを呼び出して、ツイート実行
-            await Program.Main(new string[] { null });
+            // 年は指定しないためnullを引数で渡す
+            await Program.Main(null);
         }
     }
 }
