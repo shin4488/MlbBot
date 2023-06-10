@@ -1,3 +1,6 @@
+# how to deploy to AWS lambda
+https://stackoverflow.com/questions/73049998/net-binaries-missing-aws-lambda
+
 # AWS Lambda Empty Function Project
 
 This starter project consists of:
