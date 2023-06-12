@@ -112,33 +112,28 @@ namespace TwitterMlbBot.Twitter
         /// <param name="param">データ</param>
         public async Task CreateTweet(Param param)
         {
-            List<string> targetTweetContentList = new List<string>();
-
             // 最初に今日の日付のみツイートする
             string todayDate = DateTime.Now.ToShortDateString();
-            targetTweetContentList.Add(todayDate);
+            List<string> targetTweetContentList = new List<string> { todayDate };
 
             foreach (ParamByKey teamsByKey in param.TeamsList)
             {
                 // 各チームのデータからツイート文を作成
-                List<string> messagesByTeam = teamsByKey.Teams
-                    .Select(team =>
-                    {
-                        // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
-                        string teamTweetMessage =
-                            team.Ranking.ToString() + ". " +
-                            team.Name.PadRight(_teamNamePadding) + " : " +
-                            team.Wins.ToString().PadRight(_digitPadding) + " : " +
-                            team.Losses.ToString().PadRight(_digitPadding) + " : " +
-                            team.GamesBehind.ToString();
-                        return teamTweetMessage;
-                    }).ToList();
+                var standingBuffer = new StringBuilder();
+                teamsByKey.Teams.ForEach(team =>
+                {
+                    // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
+                    standingBuffer
+                        .Append(team.Ranking.ToString()).Append(". ")
+                        .Append(team.Name.PadRight(_teamNamePadding)).Append(" : ")
+                        .Append(team.Wins.ToString().PadRight(_digitPadding)).Append(" : ")
+                        .Append(team.Losses.ToString().PadRight(_digitPadding)).Append(" : ")
+                        .Append(team.GamesBehind.ToString()).Append("\n");
+                });
 
                 string tweetMessage =
                     $"{teamsByKey.Key.League} | {teamsByKey.Key.Division} (Win : Loss : Behind)\n" +
-                    // チーム順位
-                    $"{string.Join('\n', messagesByTeam)}\n" +
-                    // タグ付けメッセージ
+                    standingBuffer.ToString() +
                     teamsByKey.TagMessage;
 
                 // 地区ごとにツイート対象を保持
