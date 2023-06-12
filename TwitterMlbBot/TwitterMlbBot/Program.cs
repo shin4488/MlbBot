@@ -38,7 +38,7 @@ namespace TwitterMlbBot
             Twitter.Param twitterParam = MapToTwitterParam(mlbResult.ResultTeamList);
 
             TwitterService twitter = new TwitterService();
-            twitter.CreateTweet(twitterParam);
+            await twitter.CreateTweet(twitterParam);
         }
 
         /// <summary>
