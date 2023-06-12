@@ -11,8 +11,8 @@ namespace TwitterMlbBot.Twitter
 {
     class TwitterService
     {
-        private const int _teamNamePadding = 12;
-        private const int _digitPadding = 2;
+        private const int teamNamePadding = 12;
+        private const int digitPadding = 2;
         private readonly string consumerKey;
         private readonly string consumerSecret;
         private readonly string accessKey;
@@ -125,9 +125,9 @@ namespace TwitterMlbBot.Twitter
                     // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
                     standingBuffer
                         .Append(team.Ranking.ToString()).Append(". ")
-                        .Append(team.Name.PadRight(_teamNamePadding)).Append(" : ")
-                        .Append(team.Wins.ToString().PadRight(_digitPadding)).Append(" : ")
-                        .Append(team.Losses.ToString().PadRight(_digitPadding)).Append(" : ")
+                        .Append(team.Name.PadRight(teamNamePadding)).Append(" : ")
+                        .Append(team.Wins.ToString().PadRight(digitPadding)).Append(" : ")
+                        .Append(team.Losses.ToString().PadRight(digitPadding)).Append(" : ")
                         .Append(team.GamesBehind.ToString()).Append("\n");
                 });
 
