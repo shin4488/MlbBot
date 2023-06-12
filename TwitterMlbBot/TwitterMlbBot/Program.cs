@@ -24,37 +24,21 @@ namespace TwitterMlbBot
         public static async Task Main(string[] args)
         {
             CreateMapping();
+
+            // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
+            int year = args?.Length > 0 && int.TryParse(args[0], out int inputYear)
+                ? inputYear
+                : DateTime.Now.Year
+                ;
+            Mlb.Param mlbParam = new Mlb.Param() { Year = year };
+            MlbService mlb = new MlbService();
+            Result mlbResult = await mlb.GetStandingData(mlbParam);
+
+            // Mlbクラスの戻り値用クラスからTwitterクラスの引数用クラスへMapping
+            Twitter.Param twitterParam = MapToTwitterParam(mlbResult.ResultTeamList);
+
             TwitterService twitter = new TwitterService();
-
-            try
-            {
-                // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
-                int year = args?.Length > 0 && int.TryParse(args[0], out int inputYear)
-                    ? inputYear
-                    : DateTime.Now.Year
-                    ;
-                Mlb.Param mlbParam = new Mlb.Param() { Year = year };
-                // MLB順位データの受け取り
-                MlbService mlb = new MlbService();
-                Result mlbResult = await mlb.GetStandingData(mlbParam);
-
-                // Mlbクラスの戻り値用クラスからTwitterクラスの引数用クラスへMapping
-                Twitter.Param twitterParam = MapToTwitterParam(mlbResult.ResultTeamList);
-                // リーグ・地区ごとに順位をツイート
-                twitter.CreateTweet(twitterParam);
-            }
-            // TODO:例外発生時のログ出力
-            catch (TwitterException e)
-            {
-                // CoreTweetに関するエラー。
-                Console.WriteLine(e.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
-                // 接続エラー発生時にエラーメッセージをツイート
-                twitter.ExecuteTweet(_tweetedErrorMessage);
-            }
+            twitter.CreateTweet(twitterParam);
         }
 
         /// <summary>
