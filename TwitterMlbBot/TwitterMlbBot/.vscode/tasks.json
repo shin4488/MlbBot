@@ -1,0 +1,20 @@
+{
+    "version": "2.0.0",
+    "command": "dotnet",
+    "args": [],
+    "tasks": [
+        {
+            "label": "build",
+            "args": [
+                "build",
+                "${workspaceFolder}/TwitterMlbBot.csproj"
+            ],
+            "type": "shell",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher":"$msCompile"
+        }
+    ]
+}
