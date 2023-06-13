@@ -1,5 +1,19 @@
 # how to deploy to AWS lambda
 https://stackoverflow.com/questions/73049998/net-binaries-missing-aws-lambda
+https://edit-anything.com/blog/401-unauthorized.html
+https://sk13g.com/twitter-api-suspended/
+https://php-mania.com/memo/68
+> プロジェクトを作成すると、Twitter APIのv2（バージョン2）が利用出来るようになります。
+> ちなみにスタンドアロンアプリは、バージョン1のみで、v2（バージョン2）は利用できないみたいです。
+https://research-labo.com/howto-twitterapi-getkeys/
+Twitter API v2仕様
+https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets
+Twitter API v2をOAuth1.0で認証するときの認証ヘッダーの仕様
+https://developer.twitter.com/en/docs/authentication/oauth-1-0a
+Twitter API v2をOAuth1.0で認証するときの認証ヘッダーの値作成の実装方法
+https://liamhunt.blog/posts/c-twitter-api-post-tweet-oauth-1-0a/
+ConfigureAwait(false)の代わりにawait Task.Run(async () => {})を使う
+https://dev.to/noseratio/why-i-no-longer-use-configureawait-false-3pne
 
 # AWS Lambda Empty Function Project
 
