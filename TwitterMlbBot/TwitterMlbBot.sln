@@ -5,9 +5,9 @@ VisualStudioVersion = 16.0.29806.167
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwitterMlbBot", "TwitterMlbBot\TwitterMlbBot.csproj", "{9F45BE08-0C0B-431B-9FB2-9825E4E697DA}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwitterMlbBotExecution", "TwitterMlbBotExecution\TwitterMlbBotExecution.csproj", "{BC4EA187-F005-4356-AB08-E8CFE83A1622}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwitterMlbBotExecution", "TwitterMlbBotExecution\src\TwitterMlbBotExecution\TwitterMlbBotExecution.csproj", "{BC4EA187-F005-4356-AB08-E8CFE83A1622}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwitterMlbBotExecution.Tests", "TwitterMlbBotExecution.Tests\TwitterMlbBotExecution.Tests.csproj", "{660A3604-94A1-4E71-B977-B64CAA88C67B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwitterMlbBotExecution.Tests", "TwitterMlbBotExecution\test\TwitterMlbBotExecution.Tests\TwitterMlbBotExecution.Tests.csproj", "{660A3604-94A1-4E71-B977-B64CAA88C67B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
