@@ -11,7 +11,6 @@ namespace TwitterMlbBot
 {
     public class Program
     {
-        private const string _tweetedErrorMessage = "Sorry. Currently this bot is getting drunk.";
         private static IMapper _mapper;
 
         /// <summary>
