@@ -7,7 +7,7 @@
             "label": "build",
             "args": [
                 "build",
-                "${workspaceFolder}/TwitterMlbBot.csproj"
+                "${workspaceFolder}/TwitterMlbBot/TwitterMlbBot.csproj"
             ],
             "type": "shell",
             "group": {
