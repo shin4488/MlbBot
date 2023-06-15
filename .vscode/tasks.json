@@ -4,10 +4,23 @@
     "args": [],
     "tasks": [
         {
-            "label": "build",
+            "label": "build bot",
             "args": [
                 "build",
                 "${workspaceFolder}/TwitterMlbBot/TwitterMlbBot.csproj"
+            ],
+            "type": "shell",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher":"$msCompile"
+        },
+        {
+            "label": "build lambda",
+            "args": [
+                "build",
+                "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/TwitterMlbBotExecution.csproj"
             ],
             "type": "shell",
             "group": {

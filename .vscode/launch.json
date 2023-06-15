@@ -8,12 +8,24 @@
             "name": ".NET Core Launch (console) TwitterMlbBot",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "build",
+            "preLaunchTask": "build bot",
             "program": "${workspaceFolder}/TwitterMlbBot/bin/Debug/net6.0/TwitterMlbBot.dll",
             "args": [],
             "cwd": "${workspaceFolder}/TwitterMlbBot",
             "stopAtEntry": false,
             "console": "internalConsole"
+        },
+        {
+            "name": ".NET Core Launch (console) Lambda Function",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build lambda",
+            "program": "${env:HOME}/.dotnet/tools/dotnet-lambda-test-tool-6.0",
+            "args": [],
+            "cwd": "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
         }
 
     ]
