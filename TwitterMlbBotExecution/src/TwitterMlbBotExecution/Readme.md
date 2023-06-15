@@ -14,6 +14,8 @@ Twitter API v2をOAuth1.0で認証するときの認証ヘッダーの値作成�
 https://liamhunt.blog/posts/c-twitter-api-post-tweet-oauth-1-0a/
 ConfigureAwait(false)の代わりにawait Task.Run(async () => {})を使う
 https://dev.to/noseratio/why-i-no-longer-use-configureawait-false-3pne
+lambda functionをlocalで実行する方法として、PackageReferenceを使用する場合は、参照される方のプロジェクトは`<PropertyGroup>`で`<OutputType>Library</OutputType>`指定としてクラスライブラリとする（Exe指定だと動かない）
+https://github.com/aws/aws-lambda-dotnet/issues/1235#issuecomment-1181045785
 
 # AWS Lambda Empty Function Project
 
@@ -23,7 +25,7 @@ This starter project consists of:
 
 You may also have a test project depending on the options selected.
 
-The generated function handler is a simple method accepting a string argument that returns the uppercase equivalent of the input string. Replace the body of this method, and parameters, to suit your needs. 
+The generated function handler is a simple method accepting a string argument that returns the uppercase equivalent of the input string. Replace the body of this method, and parameters, to suit your needs.
 
 ## Here are some steps to follow from Visual Studio:
 
