@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - '*.md'
       - '.gitignore'
+      # - '.github/**'
       - '.vscode/**'
 jobs:
   deploy:
@@ -33,5 +34,7 @@ jobs:
           zip TwitterMlbBotExecution -r ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
 
       - name: Deploy
+        # デプロイ結果のoutputはターミナルに表示したくないため、いったんファイルに出力させてそのファイルをすぐ削除している
         run: >
           aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish >> deploy.log
+          && rm deploy.log
