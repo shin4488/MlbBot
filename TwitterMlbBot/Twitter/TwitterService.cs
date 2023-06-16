@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
+using TwitterMlbBot.Authorization;
 
 namespace TwitterMlbBot.Twitter
 {
@@ -13,97 +12,21 @@ namespace TwitterMlbBot.Twitter
     {
         private const int teamNamePadding = 12;
         private const int digitPadding = 2;
-        private readonly string consumerKey;
-        private readonly string consumerSecret;
-        private readonly string accessKey;
-        private readonly string accessSecret;
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
         private static readonly HttpClient client = new HttpClient();
 
         public TwitterService()
         {
-            // WebAPI認証用データ取得
             Dictionary<string, string> apiKeyConfig = ProcessUtility.ReadAppConfig("twitter");
-            // AWSのlambda関数使用時はApp.configの値がnullとなるためnullチェックを入れる
-            this.consumerKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerKey", "CONSUMER_KEY");
-            this.consumerSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerSecret", "CONSUMER_SECRET");
-            this.accessKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessKey", "ACCESS_KEY");
-            this.accessSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessSecret", "ACCESS_SECRET");
-            string authorizationContent = CreateAuthorizationData();
+            string consumerKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerKey", "CONSUMER_KEY");
+            string consumerSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerSecret", "CONSUMER_SECRET");
+            string accessKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessKey", "ACCESS_KEY");
+            string accessSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessSecret", "ACCESS_SECRET");
+            // twitter apiはOAuth1.0も使用可能
+            // ツイート用のAPIに対しては、認証へッダーは同じであるため1度だけ設定すれば良い
+            var authorization = new OAuth1(consumerKey, consumerSecret, accessKey, accessSecret);
+            string authorizationContent = authorization.CreateAuthorizationData(twitterEndpoint);
             client.DefaultRequestHeaders.Add("Authorization", $"OAuth {authorizationContent}");
-        }
-
-        private string CreateAuthorizationData() {
-            var timstamp = CreateTimestamp();
-            var nonce = CreateNonce();
-            var signatureBase64 = CreateSignature(twitterEndpoint, "POST", nonce, timstamp);
-            return $@"oauth_consumer_key=""{Uri.EscapeDataString(this.consumerKey)}""" +
-                    $@",oauth_token=""{Uri.EscapeDataString(this.accessKey)}""" +
-                    $@",oauth_signature_method=""HMAC-SHA1""" +
-                    $@",oauth_timestamp=""{Uri.EscapeDataString(timstamp)}""" +
-                    $@",oauth_nonce=""{Uri.EscapeDataString(nonce)}""" +
-                    $@",oauth_version=""1.0""" +
-                    $@",oauth_signature=""{Uri.EscapeDataString(signatureBase64)}""";
-        }
-
-        private string CreateSignature(string url, string method, string nonce, string timestamp)
-        {
-            var parameters = new Dictionary<string, string>();
-            parameters.Add("oauth_consumer_key", this.consumerKey);
-            parameters.Add("oauth_nonce", nonce);
-            parameters.Add("oauth_signature_method", "HMAC-SHA1");
-            parameters.Add("oauth_timestamp", timestamp);
-            parameters.Add("oauth_token", this.accessKey);
-            parameters.Add("oauth_version", "1.0");
-
-            var sigBaseString = CombineQueryParams(parameters);
-            var signatureBaseString =
-                method.ToString() + "&" +
-                Uri.EscapeDataString(url) + "&" +
-                Uri.EscapeDataString(sigBaseString.ToString());
-            var compositeKey =
-                Uri.EscapeDataString(this.consumerSecret) + "&" +
-                Uri.EscapeDataString(this.accessSecret);
-            using (var hasher = new HMACSHA1(Encoding.ASCII.GetBytes(compositeKey)))
-            {
-                return Convert.ToBase64String(hasher.ComputeHash(
-                    Encoding.ASCII.GetBytes(signatureBaseString)));
-            }
-        }
-
-        private string CreateTimestamp()
-        {
-            var totalSeconds = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc))
-                .TotalSeconds;
-            return Convert.ToInt64(totalSeconds).ToString();
-        }
-
-        private string CreateNonce()
-        {
-            return Convert.ToBase64String(
-                new ASCIIEncoding().GetBytes(
-                    DateTime.Now.Ticks.ToString()));
-        }
-
-        public string CombineQueryParams(Dictionary<string, string> parameters)
-        {
-            if (parameters == null || !parameters.Any())
-            {
-                return string.Empty;
-            }
-
-            var buffer = new StringBuilder();
-            foreach (var param in parameters)
-            {
-                buffer
-                    .Append(param.Key)
-                    .Append("=")
-                    .Append(Uri.EscapeDataString(param.Value))
-                    .Append("&");
-            }
-
-            // 末尾の&以降は、その後に続くパラメータが存在しないため不要
-            return buffer.ToString().TrimEnd('&');
         }
 
         /// <summary>
