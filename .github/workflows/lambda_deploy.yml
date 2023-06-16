@@ -31,7 +31,7 @@ jobs:
       - name: Build
         run: |
           dotnet build ${GITHUB_WORKSPACE}
-          zip TwitterMlbBotExecution -r ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
+          (cd ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0 && zip -r TwitterMlbBotExecution.zip .)
 
       - name: Deploy
         # デプロイ結果のoutputはターミナルに表示したくないため、いったんファイルに出力させてそのファイルをすぐ削除している
