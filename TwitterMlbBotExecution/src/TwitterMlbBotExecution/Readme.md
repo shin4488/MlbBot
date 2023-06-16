@@ -16,6 +16,12 @@ ConfigureAwait(false)の代わりにawait Task.Run(async () => {})を使う
 https://dev.to/noseratio/why-i-no-longer-use-configureawait-false-3pne
 lambda functionをlocalで実行する方法として、PackageReferenceを使用する場合は、参照される方のプロジェクトは`<PropertyGroup>`で`<OutputType>Library</OutputType>`指定としてクラスライブラリとする（Exe指定だと動かない）
 https://github.com/aws/aws-lambda-dotnet/issues/1235#issuecomment-1181045785
+lambdaへのデプロイコマンド
+```
+zip TwitterMlbBotExecution -r TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
+aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
+```
+https://soypocket.com/it/github-actions-aws-lambda-deploy/
 
 # AWS Lambda Empty Function Project
 
