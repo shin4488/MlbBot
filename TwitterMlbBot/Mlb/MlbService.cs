@@ -1,8 +1,8 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Text.Json;
 
 namespace TwitterMlbBot.Mlb
 {
@@ -47,7 +47,7 @@ namespace TwitterMlbBot.Mlb
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             Result result = new Result
             {
-                ResultTeamList = JsonConvert.DeserializeObject<List<DetailResult>>(responseBody)
+                ResultTeamList = JsonSerializer.Deserialize<List<DetailResult>>(responseBody)
             };
             return result;
         }

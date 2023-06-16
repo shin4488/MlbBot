@@ -1,8 +1,8 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace TwitterMlbBot
@@ -26,7 +26,7 @@ namespace TwitterMlbBot
             // Httpメソッド、URIの設定
             HttpMethod httpMethod = new HttpMethod(method);
             using HttpRequestMessage request = new HttpRequestMessage(httpMethod, uri);
-            
+
             if (headers != null)
             {
                 // リクエストヘッダの設定
@@ -39,7 +39,7 @@ namespace TwitterMlbBot
             if (body != null)
             {
                 // リクエストボディの設定
-                string requestBody = JsonConvert.SerializeObject(body);
+                string requestBody = JsonSerializer.Serialize(body);
                 StringContent bodyContent = new StringContent(requestBody);
                 request.Content = bodyContent;
             }
@@ -56,7 +56,7 @@ namespace TwitterMlbBot
         {
             string config = ConfigurationManager.AppSettings[identifier];
             // AWSのlambda関数で実行するとconfigがnullとなるため、nullチェックを入れる
-            return config == null ? null : JsonConvert.DeserializeObject<Dictionary<string, string>>(config);
+            return config == null ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(config);
         }
 
         /// <summary>
