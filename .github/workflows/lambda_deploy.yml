@@ -22,8 +22,9 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '6.0.x'
+        run: dotnet build ${ GITHUB_WORKSPACE }
 
       - name: Build and Deploy
         run: |
-          zip TwitterMlbBotExecution -r ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
+          zip TwitterMlbBotExecution -r ${ GITHUB_WORKSPACE }/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
           aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
