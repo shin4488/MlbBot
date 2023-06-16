@@ -22,7 +22,11 @@ zip TwitterMlbBotExecution -r TwitterMlbBotExecution/src/TwitterMlbBotExecution/
 aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
 ```
 https://soypocket.com/it/github-actions-aws-lambda-deploy/
-デプロイテスト
+GitHub Actionsのworking directory取得は`${GITHUB_WORKSPACE}`
+https://stackoverflow.com/questions/67586339/github-actions-get-absolute-path-to-working-directory
+zipコマンドでbinディレクトリをzipにする
+> このようにすると、アーカイブ内に aaa/bbb/ccc ディレクトリが含まれてしまいます。 アーカイブ内のトップのディレクトリを sample ディレクトリにしたい場合は、次の様にカレントディレクトリを変更してから zip コマンドを実行するようにします。
+https://maku77.github.io/linux/manage/backup.html
 
 # AWS Lambda Empty Function Project
 
