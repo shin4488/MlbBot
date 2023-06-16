@@ -10,7 +10,6 @@ namespace TwitterMlbBot.Twitter
 {
     class TwitterService
     {
-        // デプロイテスト
         private const int teamNamePadding = 12;
         private const int digitPadding = 2;
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
