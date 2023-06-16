@@ -25,5 +25,5 @@ jobs:
 
       - name: Build and Deploy
         run: |
-          zip TwitterMlbBotExecution -r TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
+          zip TwitterMlbBotExecution -r ${{ vars.GITHUB_WORKSPACE }}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
           aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
