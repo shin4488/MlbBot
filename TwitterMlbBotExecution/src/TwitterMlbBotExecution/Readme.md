@@ -22,6 +22,7 @@ zip TwitterMlbBotExecution -r TwitterMlbBotExecution/src/TwitterMlbBotExecution/
 aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
 ```
 https://soypocket.com/it/github-actions-aws-lambda-deploy/
+デプロイテスト
 
 # AWS Lambda Empty Function Project
 
