@@ -3,6 +3,11 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '*.md'
+      - '.gitignore'
+      - '.github/**'
+      - '.vscode/**'
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,8 +28,12 @@ jobs:
         with:
           dotnet-version: '6.0.x'
 
-      - name: Build and Deploy
+      - name: Build
         run: |
           dotnet build ${GITHUB_WORKSPACE}
           zip TwitterMlbBotExecution -r ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
-          aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish
+
+      - name: Deploy
+        run: >
+          aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish | jq '
+          if .Environment.Variables? then .Environment.Variables = "****" else . end'
