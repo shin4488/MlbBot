@@ -27,4 +27,4 @@ jobs:
         run: |
           dotnet build ${GITHUB_WORKSPACE}
           zip TwitterMlbBotExecution -r ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0
-          aws lambda update-function-code --function-name TwitterMlbBot --zip-file fileb://TwitterMlbBotExecution.zip --publish
+          aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish
