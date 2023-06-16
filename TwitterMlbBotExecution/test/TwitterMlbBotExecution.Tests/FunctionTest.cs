@@ -7,11 +7,11 @@ namespace TwitterMlbBotExecution.Tests;
 public class FunctionTest
 {
     [Fact]
-    public void TestToUpperFunction()
+    public async void TestToUpperFunction()
     {
         // Invoke the lambda function and confirm the string was upper cased.
         var function = new Function();
         var context = new TestLambdaContext();
-        function.FunctionHandlerAsync("hello world", context);
+        await function.FunctionHandlerAsync("hello world", context);
     }
 }
