@@ -6,7 +6,6 @@ using TwitterMlbBot;
 
 namespace TwitterMlbBotExecution;
 
-// テストコメント
 public class Function
 {
     /// <summary>
