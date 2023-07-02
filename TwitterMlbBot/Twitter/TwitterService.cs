@@ -44,11 +44,11 @@ namespace TwitterMlbBot.Twitter
                 // 各チームのデータからツイート文を作成
                 var standingBuffer = new StringBuilder();
                 standingBuffer
-                    .Append("⚾️ ")
                     .Append(teamsByKey.Key.League)
                     .Append(" | ")
                     .Append(teamsByKey.Key.Division)
-                    .AppendLine(" (Win : Loss : Behind)");
+                    .Append(" ⚾️ ")
+                    .AppendLine("Win : Loss : Behind");
                 teamsByKey.Teams.ForEach(team =>
                 {
                     // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
