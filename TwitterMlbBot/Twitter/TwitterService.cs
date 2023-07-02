@@ -43,6 +43,12 @@ namespace TwitterMlbBot.Twitter
             {
                 // 各チームのデータからツイート文を作成
                 var standingBuffer = new StringBuilder();
+                standingBuffer
+                    .Append("⚾️ ")
+                    .Append(teamsByKey.Key.League)
+                    .Append(" | ")
+                    .Append(teamsByKey.Key.Division)
+                    .AppendLine(" (Win : Loss : Behind)");
                 teamsByKey.Teams.ForEach(team =>
                 {
                     // ツイート文は「<順位> : <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
@@ -51,16 +57,12 @@ namespace TwitterMlbBot.Twitter
                         .Append(team.Name.PadRight(teamNamePadding)).Append(" : ")
                         .Append(team.Wins.ToString().PadRight(digitPadding)).Append(" : ")
                         .Append(team.Losses.ToString().PadRight(digitPadding)).Append(" : ")
-                        .Append(team.GamesBehind.ToString()).Append("\n");
+                        .AppendLine(team.GamesBehind.ToString());
                 });
-
-                string tweetMessage =
-                    $"{teamsByKey.Key.League} | {teamsByKey.Key.Division} (Win : Loss : Behind)\n" +
-                    standingBuffer.ToString() +
-                    teamsByKey.TagMessage;
+                standingBuffer.Append(teamsByKey.TagMessage);
 
                 // 地区ごとにツイート対象を保持
-                targetTweetContentList.Add(tweetMessage);
+                targetTweetContentList.Add(standingBuffer.ToString());
             }
 
             // 順位データが存在する場合のみ、一斉にツイート実行
