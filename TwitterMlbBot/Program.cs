@@ -62,7 +62,7 @@ namespace TwitterMlbBot
                     {
                         Key = new GroupKey(),
                         // 「#MLB #<1位チーム名>」をタグ付けメッセージとする
-                        TagMessage = "#MLB #" + Regex.Replace(teams.First().Name, @"\s", ""),
+                        TagMessage = "#MLB #" + Regex.Replace(teams.First().Name, @"\s", "") + "#Baseball",
                         Teams = new List<DetailParam>()
                     };
                     paramTeamListData.Key.League = teams.Key.League;
