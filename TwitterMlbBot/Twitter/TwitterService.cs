@@ -44,6 +44,7 @@ namespace TwitterMlbBot.Twitter
                 // 各チームのデータからツイート文を作成
                 var standingBuffer = new StringBuilder();
                 standingBuffer
+                    .Append("⚾ ")
                     .Append(teamsByKey.Key.League)
                     .Append(" | ")
                     .Append(teamsByKey.Key.Division)
