@@ -61,8 +61,6 @@ namespace TwitterMlbBot
                     ParamByKey paramTeamListData = new ParamByKey
                     {
                         Key = new GroupKey(),
-                        // 「#MLB #<1位チーム名>」をタグ付けメッセージとする
-                        TagMessage = "#MLB #" + Regex.Replace(teams.First().Name, @"\s", "") + " #Baseball",
                         Teams = new List<DetailParam>()
                     };
                     paramTeamListData.Key.League = teams.Key.League;
@@ -70,7 +68,7 @@ namespace TwitterMlbBot
 
                     // チームデータのマッピング
                     int ranking = 0;
-                    paramTeamListData.Teams = teams
+                    List<DetailParam> teamList = teams
                     .Select(team =>
                     {
                         DetailParam param = new DetailParam
@@ -80,6 +78,11 @@ namespace TwitterMlbBot
                         _mapper.Map(team, param);
                         return param;
                     }).ToList();
+                    paramTeamListData.Teams = teamList;
+                    // 「#MLB #<1位チーム名>」をタグ付けメッセージとする
+                    paramTeamListData.TagMessage =  "#MLB" +
+                        " #" + Regex.Replace(paramTeamListData.Teams.First().Name, @"\s", "") +
+                        " #" + Regex.Replace(paramTeamListData.Teams[1].Name, @"\s", "");
                     return paramTeamListData;
 
                 }).ToList();
