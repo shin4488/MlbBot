@@ -51,6 +51,8 @@ namespace TwitterMlbBot
             // WebAPIレスポンスの順位データ（JSON）をリーグごと・地区ごとのチームリストに変換
             var teamsListByLeageDivision = resultTeamList
                 .GroupBy(team => new { team.League, team.Division })
+                // All Starsというチームが、「リーグ: AL, 地区: AL」の「リーグ: NL, 地区: NL」形式で1チームだけ入ってるので、それは除外する
+                .Where(g => g.Skip(1).Any())
                 .ToList();
 
             // キーデータ（リーグ・地区）ごとにチームデータをTwitter用Paramクラスに詰め替え
