@@ -26,6 +26,9 @@ namespace TwitterMlbBot.Twitter
             // ツイート用のAPIに対しては、認証へッダーは同じであるため1度だけ設定すれば良い
             var authorization = new OAuth1(consumerKey, consumerSecret, accessKey, accessSecret);
             string authorizationContent = authorization.CreateAuthorizationData(twitterEndpoint);
+            // HttpClientはstaticフィールドのため、コンテナ再利用などでコンストラクタが再度呼ばれると、DefaultRequestHeadersにAuthorizationが重複追加されて、FormatExceptionが発生する
+            // そのため、Addの前にRemoveして重複を防ぐ
+            client.DefaultRequestHeaders.Remove("Authorization");
             client.DefaultRequestHeaders.Add("Authorization", $"OAuth {authorizationContent}");
         }
 
