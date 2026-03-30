@@ -26,15 +26,11 @@ namespace TwitterMlbBot.Mlb
         /// <returns>リーグごと・地区ごとのチームデータ</returns>
         public async Task<Result> GetStandingData(Param param)
         {
-            string uri = endpoint + param.Year;
-            Dictionary<string, string> headers = new Dictionary<string, string>
-            {
-                { "Ocp-Apim-Subscription-Key", this.apiKey }
-            };
+            string uri = endpoint + param.Year + "?key=" + this.apiKey;
 
             // WebAPIコールアウト
             HttpResponseMessage response =
-                await ProcessUtility.CalloutAsync(client, "GET", uri, headers, null);
+                await ProcessUtility.CalloutAsync(client, "GET", uri, null, null);
             if (!response.IsSuccessStatusCode)
             {
                 // WebAPIレスポンスが200台:OK以外の場合は例外発生
