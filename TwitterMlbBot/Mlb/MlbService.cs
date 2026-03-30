@@ -38,6 +38,7 @@ namespace TwitterMlbBot.Mlb
             }
 
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            Console.WriteLine(responseBody);
             Result result = new Result
             {
                 ResultTeamList = JsonSerializer.Deserialize<List<DetailResult>>(responseBody)
