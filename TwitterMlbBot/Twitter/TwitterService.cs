@@ -75,6 +75,8 @@ namespace TwitterMlbBot.Twitter
             foreach (string tweetContent in targetTweetContentList)
             {
                 await ExecuteTweet(tweetContent);
+                // X APIの503 エラー（短時間での連続POSTによる制限）を防ぐため、2秒間のインターバルを設ける
+                await Task.Delay(2000);
             }
         }
 

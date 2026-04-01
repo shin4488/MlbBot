@@ -61,9 +61,9 @@ namespace TwitterMlbBot.Authorization
 
         private string CreateTimestamp()
         {
-            var totalSeconds = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc))
-                .TotalSeconds;
-            return Convert.ToInt64(totalSeconds).ToString();
+            // OAuth 1.0a では時刻をUNIXタイムスタンプ（切り捨て）で指定する必要がある
+            // X APIは未来のタイムスタンプを不正なリクエストとして弾くため、確実に時刻の切り捨てが行われるようにする
+            return DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         }
 
         private string CreateNonce()
