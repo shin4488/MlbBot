@@ -75,8 +75,9 @@ namespace TwitterMlbBot.Twitter
             foreach (string tweetContent in targetTweetContentList)
             {
                 await ExecuteTweet(tweetContent);
-                // X APIの503 エラー（短時間での連続POSTによる制限）を防ぐため、2秒間のインターバルを設ける
-                await Task.Delay(2000);
+                // X APIの503 エラー（短時間での連続POSTによる制限）を防ぐため、インターバルを設ける
+                // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
+                await Task.Delay(1000);
             }
         }
 
@@ -91,6 +92,7 @@ namespace TwitterMlbBot.Twitter
             string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
             string requestBody = JsonSerializer.Serialize(new { text = tweetMessage });
             var request = new HttpRequestMessage(HttpMethod.Post, twitterEndpoint);
+            request.Headers.ExpectContinue = false; // Twitter API側の503対策として `Expect: 100-continue` を無効化
             request.Headers.Add("Authorization", $"OAuth {authorizationContent}");
             request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
