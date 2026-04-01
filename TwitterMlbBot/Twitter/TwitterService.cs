@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -35,8 +34,8 @@ namespace TwitterMlbBot.Twitter
         /// <param name="param">データ</param>
         public async Task CreateTweet(Param param)
         {
-            // 最初に今日の日付のみツイートする（重複エラー回避のため時刻も指定）
-            string todayDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
+            // 最初に今日の日付のみツイートする
+            string todayDate = DateTime.Now.ToShortDateString();
             List<string> targetTweetContentList = new List<string> { todayDate };
 
             foreach (ParamByKey teamsByKey in param.TeamsList)
@@ -61,9 +60,6 @@ namespace TwitterMlbBot.Twitter
                         .AppendLine(team.GamesBehind.ToString());
                 });
                 standingBuffer.Append(teamsByKey.TagMessage);
-
-                // 重複エラー回避のため、末尾に実行時刻を付与
-                standingBuffer.AppendLine().Append($"[{DateTime.Now.ToString("HH:mm:ss")}]");
 
                 // 地区ごとにツイート対象を保持
                 targetTweetContentList.Add(standingBuffer.ToString());
@@ -101,17 +97,10 @@ namespace TwitterMlbBot.Twitter
             request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
             var response = await client.SendAsync(request);
-            // Lambda等で結果が分かるようにログを出力する
-            string responseContent = await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"[Success] Tweet created. HTTP {response.StatusCode} - {responseContent}");
-            }
-            else
-            {
-                var headersInfo = string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(";", h.Value)}"));
+                string responseContent = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"Tweet failed: {response.StatusCode} - {responseContent}");
-                Console.WriteLine($"[Debug] Response Headers: {headersInfo}");
             }
         }
     }
