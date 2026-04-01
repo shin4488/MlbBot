@@ -97,11 +97,17 @@ namespace TwitterMlbBot.Twitter
             request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
             var response = await client.SendAsync(request);
-            // Lambda等でエラー原因が分かるようにログを出力する
-            if (!response.IsSuccessStatusCode)
+            // Lambda等で結果が分かるようにログを出力する
+            string responseContent = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
             {
-                string responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[Success] Tweet created. HTTP {response.StatusCode} - {responseContent}");
+            }
+            else
+            {
+                var headersInfo = string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(";", h.Value)}"));
                 Console.WriteLine($"Tweet failed: {response.StatusCode} - {responseContent}");
+                Console.WriteLine($"[Debug] Response Headers: {headersInfo}");
             }
         }
     }
