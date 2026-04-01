@@ -35,8 +35,8 @@ namespace TwitterMlbBot.Twitter
         /// <param name="param">データ</param>
         public async Task CreateTweet(Param param)
         {
-            // 最初に今日の日付のみツイートする
-            string todayDate = DateTime.Now.ToShortDateString();
+            // 最初に今日の日付のみツイートする（重複エラー回避のため時刻も指定）
+            string todayDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
             List<string> targetTweetContentList = new List<string> { todayDate };
 
             foreach (ParamByKey teamsByKey in param.TeamsList)
@@ -61,6 +61,9 @@ namespace TwitterMlbBot.Twitter
                         .AppendLine(team.GamesBehind.ToString());
                 });
                 standingBuffer.Append(teamsByKey.TagMessage);
+
+                // 重複エラー回避のため、末尾に実行時刻を付与
+                standingBuffer.AppendLine().Append($"[{DateTime.Now.ToString("HH:mm:ss")}]");
 
                 // 地区ごとにツイート対象を保持
                 targetTweetContentList.Add(standingBuffer.ToString());
