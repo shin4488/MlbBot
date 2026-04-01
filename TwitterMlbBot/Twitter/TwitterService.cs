@@ -14,6 +14,7 @@ namespace TwitterMlbBot.Twitter
         private const int digitPadding = 2;
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
         private static readonly HttpClient client = new HttpClient();
+        private readonly OAuth1 authorization;
 
         public TwitterService()
         {
@@ -22,14 +23,9 @@ namespace TwitterMlbBot.Twitter
             string consumerSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerSecret", "CONSUMER_SECRET");
             string accessKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessKey", "ACCESS_KEY");
             string accessSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "accessSecret", "ACCESS_SECRET");
-            // twitter apiはOAuth1.0も使用可能
-            // ツイート用のAPIに対しては、認証へッダーは同じであるため1度だけ設定すれば良い
-            var authorization = new OAuth1(consumerKey, consumerSecret, accessKey, accessSecret);
-            string authorizationContent = authorization.CreateAuthorizationData(twitterEndpoint);
-            // HttpClientはstaticフィールドのため、コンテナ再利用などでコンストラクタが再度呼ばれると、DefaultRequestHeadersにAuthorizationが重複追加されて、FormatExceptionが発生する
-            // そのため、Addの前にRemoveして重複を防ぐ
-            client.DefaultRequestHeaders.Remove("Authorization");
-            client.DefaultRequestHeaders.Add("Authorization", $"OAuth {authorizationContent}");
+
+            // 認証情報はインスタンス変数に保持し、リクエストごとに署名（nonceやtimestamp）を生成するようにする
+            this.authorization = new OAuth1(consumerKey, consumerSecret, accessKey, accessSecret);
         }
 
         /// <summary>
@@ -78,10 +74,7 @@ namespace TwitterMlbBot.Twitter
 
             foreach (string tweetContent in targetTweetContentList)
             {
-                await Task.Run(async () =>
-                {
-                    await ExecuteTweet(tweetContent);
-                });
+                await ExecuteTweet(tweetContent);
             }
         }
 
@@ -92,13 +85,20 @@ namespace TwitterMlbBot.Twitter
         /// <returns></returns>
         public async Task ExecuteTweet(string tweetMessage)
         {
+            // 各リクエストごとに新しいタイムスタンプとnonceを含んだOAuth署名を生成する
+            string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
             string requestBody = JsonSerializer.Serialize(new { text = tweetMessage });
-            await Task.Run(async () => {
-                await client.PostAsync(
-                    new Uri(twitterEndpoint),
-                    new StringContent(requestBody, Encoding.UTF8, "application/json")
-                );
-            });
+            var request = new HttpRequestMessage(HttpMethod.Post, twitterEndpoint);
+            request.Headers.Add("Authorization", $"OAuth {authorizationContent}");
+            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+
+            var response = await client.SendAsync(request);
+            // Lambda等でエラー原因が分かるようにログを出力する
+            if (!response.IsSuccessStatusCode)
+            {
+                string responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Tweet failed: {response.StatusCode} - {responseContent}");
+            }
         }
     }
 }
