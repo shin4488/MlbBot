@@ -4,15 +4,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using TwitterMlbBot.Mlb;
 using TwitterMlbBot.Twitter;
-using AutoMapper;
 using System.Text.RegularExpressions;
 
 namespace TwitterMlbBot
 {
     public class Program
     {
-        private static IMapper _mapper;
-
         /// <summary>
         /// MLB公式チームハッシュタグマップ（チーム名と公式タグが異なるもののみ定義）
         /// 毎シーズン変更の可能性があるため、ここで一元管理する
@@ -54,8 +51,6 @@ namespace TwitterMlbBot
         /// <returns></returns>
         public static async Task Main(string[] args)
         {
-            CreateMapping();
-
             // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
             int year = args?.Length > 0 && int.TryParse(args[0], out int inputYear)
                 ? inputYear
@@ -108,9 +103,12 @@ namespace TwitterMlbBot
                     {
                         DetailParam param = new DetailParam
                         {
-                            Ranking = ++ranking
+                            Ranking = ++ranking,
+                            Name = team.Name,
+                            Wins = team.Wins,
+                            Losses = team.Losses,
+                            GamesBehind = team.GamesBehind
                         };
-                        _mapper.Map(team, param);
                         return param;
                     }).ToList();
                     paramTeamListData.Teams = teamList;
@@ -141,17 +139,5 @@ namespace TwitterMlbBot
                 : $"#{nameNoSpace}";
         }
 
-        /// <summary>
-        /// マッピング設定
-        /// </summary>
-        private static void CreateMapping()
-        {
-            // AutoMapperでのマッピング元・マッピング先クラスの結び付け
-            var config = new MapperConfiguration(configuration =>
-            {
-                configuration.CreateMap<DetailResult, DetailParam>();
-            });
-            _mapper = config.CreateMapper();
-        }
     }
 }
