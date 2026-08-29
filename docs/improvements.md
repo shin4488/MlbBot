@@ -14,27 +14,7 @@
 1. 一時的エラーにリトライを入れる。手書きでもよいが `Polly` を使うと簡潔（`WaitAndRetryAsync(3回, 指数バックオフ)`）。
 2. リトライ分の実行時間を確保するため、Lambdaタイムアウト（現状15秒）を60秒程度へ引き上げる（[infra/](../infra/README.md) の `timeout` 変更。applyは人間が実行）。
 
-## 2. デプロイ用の旧アクセスキーの廃止（優先度: 中）
+## 2. デプロイ用の旧アクセスキーのAWS側廃止（優先度: 中）
 
-デプロイはOIDC認証（GitHub OIDC + masterブランチ限定のIAMロール）に切り替え済みのため、長期アクセスキーは不要になっている。OIDCでのデプロイ成功を1回確認したうえで:
+デプロイはOIDC認証に切り替え済みで、GitHub Secretsの旧キーは削除済み。残るはAWS側の後始末のみ（管理者権限で、IAMユーザーの該当アクセスキーを無効化→数日問題なければ削除）。
 
-1. GitHub Secretsから `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` を削除
-2. AWS側（IAMユーザーのセキュリティ認証情報）で該当アクセスキーを無効化→削除
-
-## 3. Directory.Build.props による共通設定の一元化（優先度: 低）
-
-リポジトリ直下に `Directory.Build.props` を置き、TFM・Nullable等の全プロジェクト共通設定を一元化する:
-
-```xml
-<Project>
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-  </PropertyGroup>
-</Project>
-```
-
-`Nullable` / `AnalysisLevel` の全体有効化は本体プロジェクト（Nullable無効）で警告が発生するため、警告の解消とセットで実施する。
