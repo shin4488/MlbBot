@@ -1,0 +1,20 @@
+# S3バックエンド設定のテンプレート。
+# このファイルを backend.hcl にコピーして実際の値を記入する（backend.hclはgitignore対象。
+# バケット名・リージョン等の環境固有の情報は公開リポジトリにコミットしない）。
+# 下の値はすべてダミー。書き換えずに実行するとエラーになる（書き換え忘れ防止）。
+#
+# バケットの作成コマンド例（管理者権限で実行。バケット名はグローバルで一意にする）:
+#
+#   aws s3api create-bucket --bucket <バケット名> --region <リージョン> --create-bucket-configuration LocationConstraint=<リージョン>
+#   aws s3api put-bucket-versioning --bucket <バケット名> --versioning-configuration Status=Enabled
+#   aws s3api put-bucket-encryption --bucket <バケット名> --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+#   aws s3api put-public-access-block --bucket <バケット名> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+#
+# あわせて、terraformを実行するIAMユーザーに対象バケットの
+# s3:ListBucket / s3:GetObject / s3:PutObject / s3:DeleteObject を許可すること。
+
+bucket       = "your-terraform-state-bucket"
+key          = "your-project/terraform.tfstate"
+region       = "your-aws-region"
+encrypt      = true
+use_lockfile = true
