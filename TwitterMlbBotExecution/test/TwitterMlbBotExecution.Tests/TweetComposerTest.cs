@@ -8,15 +8,16 @@ namespace TwitterMlbBotExecution.Tests;
 /// 文面組み立て（TweetComposer）のテスト
 ///
 /// テストは仕様ベースで書く方針:
-/// 文面のフォーマット（区切り文字・絵文字・並び等）は変更されうるため、
-/// 「順位順に列挙される」「タグは上位2チーム分」といった仕様レベルの不変条件のみを検証する。
-/// ハッシュタグの検証には公式タグマップに載っていないチーム名を使い、
-/// シーズンごとのマップ変更に依存させない。
+/// 「日付と順位・勝敗・ゲーム差が文面に反映される」「タグは上位2チーム分」といった
+/// 仕様レベルの不変条件を検証する。ハッシュタグの検証には公式タグマップに
+/// 載っていないチーム名を使い、シーズンごとのマップ変更に依存させない。
 /// </summary>
 public class TweetComposerTest
 {
+    private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
+
     private static TeamStanding CreateTeam(
-        string league, string division, string name, int wins, int losses, double percentage)
+        string league, string division, string name, int wins, int losses, double percentage, float? gamesBehind = 0)
     {
         return new TeamStanding
         {
@@ -26,13 +27,27 @@ public class TweetComposerTest
             Wins = wins,
             Losses = losses,
             Percentage = percentage,
-            GamesBehind = 0,
+            GamesBehind = gamesBehind,
         };
     }
 
     private static IReadOnlyList<TweetContent> Compose(List<TeamStanding> standings)
     {
-        return new TweetComposer(new HashtagProvider()).Compose(DivisionStanding.FromStandings(standings));
+        return new TweetComposer(new HashtagProvider())
+            .Compose(DivisionStanding.FromStandings(standings), testDate);
+    }
+
+    [Fact]
+    public void Compose_日付がヘッダに入る()
+    {
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+        };
+
+        string text = Assert.Single(Compose(standings)).Text;
+
+        Assert.Contains("8/30", text);
     }
 
     [Fact]
@@ -46,11 +61,40 @@ public class TweetComposerTest
             CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
         };
 
-        var tweets = Compose(standings);
+        string text = Assert.Single(Compose(standings)).Text;
 
-        string text = Assert.Single(tweets).Text;
         Assert.True(text.IndexOf("White Sox") < text.IndexOf("Astros"), "勝率1位のチームが先に出力されること");
         Assert.True(text.IndexOf("Astros") < text.IndexOf("Athletics"), "勝率2位のチームが3位より先に出力されること");
+    }
+
+    [Fact]
+    public void Compose_勝敗数がハイフン連結で入る()
+    {
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+        };
+
+        string text = Assert.Single(Compose(standings)).Text;
+
+        Assert.Contains("84-56", text);
+    }
+
+    [Fact]
+    public void Compose_ゲーム差は2位以下にのみ表示される()
+    {
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600, gamesBehind: 0),
+            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500, gamesBehind: 14.5f),
+        };
+
+        string text = Assert.Single(Compose(standings)).Text;
+
+        // 2位のゲーム差は表示される
+        Assert.Contains("(14.5)", text);
+        // 首位の行にはゲーム差を表示しない（"(0)" が現れない）
+        Assert.DoesNotContain("(0)", text);
     }
 
     [Fact]
@@ -67,7 +111,6 @@ public class TweetComposerTest
         var tweets = Compose(standings);
 
         Assert.Equal(2, tweets.Count);
-        // 各地区の文面には自地区のチームのみ含まれること
         var alTweet = Assert.Single(tweets, tweet => tweet.Text.Contains("White Sox"));
         Assert.DoesNotContain("Dodgers", alTweet.Text);
     }
@@ -88,9 +131,8 @@ public class TweetComposerTest
             CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
         };
 
-        var tweets = Compose(standings);
+        string text = Assert.Single(Compose(standings)).Text;
 
-        string text = Assert.Single(tweets).Text;
         Assert.Contains("#MLB", text);
         // チーム名のスペースは除去されてタグになる
         Assert.Contains("#WhiteSox", text);
@@ -114,9 +156,8 @@ public class TweetComposerTest
             CreateTeam("NL", "West", "Twins", 96, 66, 0.593),
         }.Select(team => team with { GamesBehind = 10.5f }).ToList();
 
-        var tweets = Compose(standings);
+        var tweet = Assert.Single(Compose(standings));
 
-        var tweet = Assert.Single(tweets);
         Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
     }
 }

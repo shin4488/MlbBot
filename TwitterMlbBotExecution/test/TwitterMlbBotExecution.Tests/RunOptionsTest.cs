@@ -55,6 +55,17 @@ public class RunOptionsTest
     }
 
     [Fact]
+    public void Parse_表示用の日付は日本時間基準になる()
+    {
+        // UTC 2026-08-29 21:00 = JST 2026-08-30 06:00（UTCとは日付が1日ずれる時刻）
+        var eveningUtc = new DateTime(2026, 8, 29, 21, 0, 0, DateTimeKind.Utc);
+
+        var options = RunOptions.Parse(null, null, eveningUtc);
+
+        Assert.Equal(new DateOnly(2026, 8, 30), options.Date);
+    }
+
+    [Fact]
     public void Parse_年の境界は日本時間基準で判定される()
     {
         // UTCではまだ大晦日だが、日本時間では年が明けている時刻
@@ -63,5 +74,6 @@ public class RunOptionsTest
         var options = RunOptions.Parse(null, null, newYearEveUtc);
 
         Assert.Equal(2027, options.Year);
+        Assert.Equal(new DateOnly(2027, 1, 1), options.Date);
     }
 }

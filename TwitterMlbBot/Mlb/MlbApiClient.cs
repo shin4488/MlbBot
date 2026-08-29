@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace TwitterMlbBot.Mlb
 {
@@ -18,10 +19,12 @@ namespace TwitterMlbBot.Mlb
         };
         private static readonly string endpoint = "https://api.sportsdata.io/v3/mlb/scores/json/Standings/";
         private readonly string apiKey;
+        private readonly ILogger<MlbApiClient> logger;
 
-        public MlbApiClient(string apiKey)
+        public MlbApiClient(string apiKey, ILogger<MlbApiClient> logger)
         {
             this.apiKey = apiKey;
+            this.logger = logger;
         }
 
         public async Task<List<TeamStanding>> GetStandingsAsync(int year)
@@ -40,7 +43,7 @@ namespace TwitterMlbBot.Mlb
             List<TeamStanding> standings =
                 JsonSerializer.Deserialize<List<TeamStanding>>(responseBody) ?? new List<TeamStanding>();
             // レスポンス全文はログに出さず、運用確認に必要な件数のみ出力する
-            Console.WriteLine($"MLB standings fetched: {standings.Count} teams for {year}");
+            this.logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", standings.Count, year);
             return standings;
         }
     }

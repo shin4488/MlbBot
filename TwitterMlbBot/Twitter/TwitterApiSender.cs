@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TwitterMlbBot.Authorization;
 using TwitterMlbBot.Composing;
 
@@ -23,10 +24,12 @@ namespace TwitterMlbBot.Twitter
         // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
         private static readonly TimeSpan postInterval = TimeSpan.FromSeconds(1);
         private readonly OAuth1 authorization;
+        private readonly ILogger<TwitterApiSender> logger;
 
-        public TwitterApiSender(OAuth1 authorization)
+        public TwitterApiSender(OAuth1 authorization, ILogger<TwitterApiSender> logger)
         {
             this.authorization = authorization;
+            this.logger = logger;
         }
 
         public async Task<bool> SendAsync(TweetContent tweetContent)
@@ -43,7 +46,7 @@ namespace TwitterMlbBot.Twitter
             if (!response.IsSuccessStatusCode)
             {
                 string responseContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Tweet failed: {response.StatusCode} - {responseContent}");
+                this.logger.LogWarning("Tweet failed: {StatusCode} - {ResponseBody}", response.StatusCode, responseContent);
             }
             await Task.Delay(postInterval);
             return response.IsSuccessStatusCode;

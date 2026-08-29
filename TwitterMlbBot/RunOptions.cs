@@ -8,7 +8,8 @@ namespace TwitterMlbBot
     /// </summary>
     /// <param name="DryRun">ツイートせず文面をコンソール出力するのみとするか</param>
     /// <param name="Year">順位データの対象年（西暦）</param>
-    internal record RunOptions(bool DryRun, int Year)
+    /// <param name="Date">ツイート文面に表示する日付（日本時間）</param>
+    internal record RunOptions(bool DryRun, int Year, DateOnly Date)
     {
         private static readonly TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
 
@@ -20,7 +21,7 @@ namespace TwitterMlbBot
         /// --dry-run でドライラン、数値の引数があればその年を対象とする
         /// </param>
         /// <param name="dryRunEnvironmentValue">環境変数DRY_RUNの値（"true"でドライラン。Lambdaでは通常未設定）</param>
-        /// <param name="utcNow">現在時刻（UTC）。年の指定がない場合、日本時間に換算した年を対象とする</param>
+        /// <param name="utcNow">現在時刻（UTC）。年・日付は日本時間に換算して決める</param>
         public static RunOptions Parse(string[]? args, string? dryRunEnvironmentValue, DateTime utcNow)
         {
             string[] arguments = args ?? Array.Empty<string>();
@@ -28,16 +29,17 @@ namespace TwitterMlbBot
             bool dryRun = arguments.Contains("--dry-run")
                 || string.Equals(dryRunEnvironmentValue, "true", StringComparison.OrdinalIgnoreCase);
 
+            DateOnly jstToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, jst));
+
             int year = arguments
                 .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
                 .FirstOrDefault(inputYear => inputYear > 0);
             if (year == 0)
             {
-                // Lambda実行環境の時刻はUTCのため、日本時間基準で対象年を決める
-                year = TimeZoneInfo.ConvertTimeFromUtc(utcNow, jst).Year;
+                year = jstToday.Year;
             }
 
-            return new RunOptions(dryRun, year);
+            return new RunOptions(dryRun, year, jstToday);
         }
     }
 }
