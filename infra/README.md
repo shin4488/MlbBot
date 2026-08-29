@@ -72,5 +72,5 @@ terraform fmt -recursive && terraform validate   # コミット前
 
 ## 次の対応候補
 
-1. **Lambdaタイムアウト60秒への引き上げ**（リトライ導入とセット。[docs/code-improvements.md](../docs/code-improvements.md) 項目1）
+1. **Lambdaタイムアウト60秒への引き上げ**（リトライ導入とセット。[docs/improvements.md](../docs/improvements.md) 項目1）
 2. **APIキーをSSM Parameter Store（SecureString・無料）へ移行** … アプリが起動時に `ssm:GetParametersByPath` で読む方式にすると、Lambda環境変数とtfstateから機密が消え、キー更新もCLIで完結する（`environment` のignore_changesも不要になる）。実行ロールへの権限付与はTerraform、パラメータ登録はCLI、読み込みはアプリ側の対応

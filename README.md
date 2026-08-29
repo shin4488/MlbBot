@@ -100,7 +100,6 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 
 ## 改善計画ドキュメント
 
-- [docs/code-improvements.md](docs/code-improvements.md) … コード改善の残候補（リトライ導入）
-- [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画
+- [docs/improvements.md](docs/improvements.md) … 改善候補（リトライ導入 / OIDC切替 / 共通設定一元化）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
 - [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク
