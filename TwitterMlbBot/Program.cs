@@ -64,7 +64,9 @@ namespace TwitterMlbBot
                 .FirstOrDefault(inputYear => inputYear > 0);
             if (year == 0)
             {
-                year = DateTime.Now.Year;
+                // Lambda実行環境の時刻はUTCのため、日本時間基準で対象年を決める
+                TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
+                year = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, jst).Year;
             }
 
             Mlb.Param mlbParam = new Mlb.Param() { Year = year };
@@ -83,15 +85,15 @@ namespace TwitterMlbBot
         /// </summary>
         /// <param name="resultTeamList">WebAPIレスポンスのチームデータ（非グループ化）</param>
         /// <returns></returns>
-        private static Twitter.Param MapToTwitterParam(List<DetailResult> resultTeamList)
+        internal static Twitter.Param MapToTwitterParam(List<DetailResult> resultTeamList)
         {
             Twitter.Param twitterParam = new Twitter.Param();
 
             // WebAPIレスポンスの順位データ（JSON）をリーグごと・地区ごとのチームリストに変換
             var teamsListByLeageDivision = resultTeamList
                 .GroupBy(team => new { team.League, team.Division })
-                // All Starsというチームが、「リーグ: AL, 地区: AL」の「リーグ: NL, 地区: NL」形式で1チームだけ入ってるので、それは除外する
-                .Where(g => g.Skip(1).Any())
+                // All-Star用の擬似チームは「リーグ: AL, 地区: AL」のようにリーグ名と地区名が同一になるため除外する
+                .Where(teams => teams.Key.League != teams.Key.Division)
                 .ToList();
 
             // キーデータ（リーグ・地区）ごとにチームデータをTwitter用Paramクラスに詰め替え
@@ -108,8 +110,11 @@ namespace TwitterMlbBot
                     paramTeamListData.Key.Division = teams.Key.Division;
 
                     // チームデータのマッピング
+                    // APIレスポンスの並び順には依存せず、勝率降順（同率なら勝ち数降順）で順位を決める
                     int ranking = 0;
                     List<DetailParam> teamList = teams
+                    .OrderByDescending(team => team.Percentage)
+                    .ThenByDescending(team => team.Wins)
                     .Select(team =>
                     {
                         DetailParam param = new DetailParam
