@@ -26,6 +26,22 @@
             "console": "internalConsole",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            // ツイートせずに文面をコンソール出力するだけのドライラン実行（文面確認用）
+            "name": "Lambda Function (dry-run / ツイートしない)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build lambda",
+            "program": "${env:HOME}/.dotnet/tools/dotnet-lambda-test-tool-6.0",
+            "args": [],
+            "cwd": "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart",
+            "env": {
+                "DRY_RUN": "true"
+            }
         }
 
     ]
