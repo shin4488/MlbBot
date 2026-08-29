@@ -72,3 +72,4 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
+- [docs/infrastructure.md](docs/infrastructure.md) … インフラのTerraform化方針

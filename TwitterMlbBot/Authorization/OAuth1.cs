@@ -69,9 +69,8 @@ namespace TwitterMlbBot.Authorization
 
         private string CreateNonce()
         {
-            return Convert.ToBase64String(
-                new ASCIIEncoding().GetBytes(
-                    DateTime.Now.Ticks.ToString()));
+            // 同一ミリ秒での衝突が理論上ありうるTicksではなく、一意性が保証されるGUIDを使う
+            return Guid.NewGuid().ToString("N");
         }
 
         public string CombineQueryParams(Dictionary<string, string> parameters)
@@ -82,7 +81,8 @@ namespace TwitterMlbBot.Authorization
             }
 
             var buffer = new StringBuilder();
-            foreach (var param in parameters)
+            // OAuth 1.0a仕様では署名ベース文字列のパラメータをキーの辞書順に並べる必要がある
+            foreach (var param in parameters.OrderBy(p => p.Key, StringComparer.Ordinal))
             {
                 buffer
                     .Append(param.Key)

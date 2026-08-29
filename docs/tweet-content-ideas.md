@@ -38,7 +38,7 @@ Xのタイムラインは**プロポーショナルフォント**なので、`Tw
 ...
 ```
 
-注意: 日付はJST基準・カルチャ非依存の固定書式（`yyyy/MM/dd` 等）で生成すること（docs/code-improvements.md 項目6参照）。
+注意: 日付はJST基準（`TimeZoneInfo.ConvertTimeFromUtc` + Asia/Tokyo）・カルチャ非依存の固定書式（`yyyy/MM/dd` 等）で生成すること。
 
 ## 3. スレッド（リプライチェーン）化
 

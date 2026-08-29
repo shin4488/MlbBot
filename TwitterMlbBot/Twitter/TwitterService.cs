@@ -13,7 +13,14 @@ namespace TwitterMlbBot.Twitter
         private const int teamNamePadding = 12;
         private const int digitPadding = 2;
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
-        private static readonly HttpClient client = new HttpClient();
+        private static readonly HttpClient client = new HttpClient()
+        {
+            // Lambdaタイムアウト（15秒）より先に打ち切り、原因を特定しやすくする
+            Timeout = TimeSpan.FromSeconds(10),
+        };
+        // X APIの503エラー（短時間での連続POSTによる制限）を防ぐためのツイート間インターバル
+        // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
+        private static readonly TimeSpan tweetInterval = TimeSpan.FromSeconds(1);
         private readonly OAuth1 authorization;
         // ドライラン時はツイートせず文面をコンソール出力するのみとする
         private readonly bool dryRun;
@@ -78,6 +85,7 @@ namespace TwitterMlbBot.Twitter
                 return;
             }
 
+            int successCount = 0;
             foreach (string tweetContent in targetTweetContentList)
             {
                 if (this.dryRun)
@@ -87,10 +95,22 @@ namespace TwitterMlbBot.Twitter
                     continue;
                 }
 
-                await ExecuteTweet(tweetContent);
-                // X APIの503 エラー（短時間での連続POSTによる制限）を防ぐため、インターバルを設ける
-                // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
-                await Task.Delay(1000);
+                if (await ExecuteTweet(tweetContent))
+                {
+                    successCount++;
+                }
+                await Task.Delay(tweetInterval);
+            }
+
+            if (!this.dryRun)
+            {
+                Console.WriteLine($"Tweets posted: {successCount}/{targetTweetContentList.Count}");
+                if (successCount == 0)
+                {
+                    // 全件失敗はLambda実行をエラーで終わらせ、CloudWatchのエラーメトリクスで検知できるようにする
+                    // （一部失敗は重複コンテンツ拒否など正常系でも起きるため、エラーにしない）
+                    throw new Exception($"ツイートが全{targetTweetContentList.Count}件失敗しました。失敗理由は直前のログを参照。");
+                }
             }
         }
 
@@ -98,8 +118,8 @@ namespace TwitterMlbBot.Twitter
         /// ツイートの実行
         /// </summary>
         /// <param name="tweetMessage">ツイート文</param>
-        /// <returns></returns>
-        public async Task ExecuteTweet(string tweetMessage)
+        /// <returns>投稿に成功した場合はtrue</returns>
+        public async Task<bool> ExecuteTweet(string tweetMessage)
         {
             if (this.dryRun)
             {
@@ -121,6 +141,7 @@ namespace TwitterMlbBot.Twitter
                 string responseContent = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"Tweet failed: {response.StatusCode} - {responseContent}");
             }
+            return response.IsSuccessStatusCode;
         }
     }
 }
