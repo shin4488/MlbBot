@@ -2,9 +2,12 @@
 
 現状の開発フロー（VSCode + dotnet CLI、GitHub ActionsでPR時CI + masterマージ時にLambdaデプロイ）を前提にした改善提案。優先度順。
 
-## 1. デプロイのOIDC化（優先度: 中・Terraform化後に対応）
+## 1. デプロイワークフローのOIDC認証への切り替え（優先度: 中）
 
-現状のデプロイは長期AWSキー（`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` のGitHub Secrets）を使っており、キー漏洩リスクと定期ローテーションの手間がある。GitHub OIDC + IAMロールに移行する:
+OIDCプロバイダーとデプロイ用ロール（masterブランチ限定・`lambda:UpdateFunctionCode` のみ）はTerraform（[infra/](../infra/README.md)）で定義済み。残作業はワークフロー側の切り替え:
+
+1. GitHub Secretsに `AWS_DEPLOY_ROLE_ARN`（デプロイ用ロールのARN）を登録
+2. lambda_deploy.ymlを長期キー認証からOIDC認証へ変更:
 
 ```yaml
 permissions:
@@ -17,13 +20,7 @@ steps:
       aws-region: ${{ secrets.AWS_REGION }}
 ```
 
-事前にIAMリソースの作成が必要:
-
-1. GitHub OIDCプロバイダー（`token.actions.githubusercontent.com`）を作成
-2. このリポジトリのmasterブランチに限定した信頼ポリシーを持つIAMロールを作成（権限は `lambda:UpdateFunctionCode` のみに絞る）
-3. 切り替え後、旧IAMユーザーのアクセスキーを無効化・削除
-
-**対応時期**: 上記IAMリソースはコード管理下で作るべきなので、**Terraform（[infra/](../infra/README.md)）で作成して**対応する。
+3. 切り替え後、旧IAMユーザーのアクセスキーをGitHub Secretsから削除し、AWS側でも無効化・削除
 
 ## 2. Directory.Build.props による共通設定の一元化（優先度: 低）
 
