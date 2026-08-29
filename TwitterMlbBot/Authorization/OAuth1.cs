@@ -21,7 +21,8 @@ namespace TwitterMlbBot.Authorization
             this.accessSecret = accessSecret;
         }
 
-        public string CreateAuthorizationData(string endpoint) {
+        public string CreateAuthorizationData(string endpoint)
+        {
             string timstamp = this.CreateTimestamp();
             string nonce = this.CreateNonce();
             string signatureBase64 = this.CreateSignature(endpoint, "POST", nonce, timstamp);

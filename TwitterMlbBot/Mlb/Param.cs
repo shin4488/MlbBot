@@ -1,4 +1,4 @@
-﻿namespace TwitterMlbBot.Mlb
+namespace TwitterMlbBot.Mlb
 {
     class Param
     {
