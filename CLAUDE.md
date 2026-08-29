@@ -64,7 +64,7 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 リファクタリングや機能追加の際は、まず以下を参照すること:
 
-- [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
+- [docs/code-improvements.md](docs/code-improvements.md) … コード改善の残候補（リトライ導入）
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（OIDC化 / 共通設定一元化 等）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
 - [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク（OIDC化・タイムアウト調整・アラーム等）

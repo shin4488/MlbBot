@@ -12,19 +12,34 @@ namespace TwitterMlbBot.Authorization
         private readonly string consumerSecret;
         private readonly string accessKey;
         private readonly string accessSecret;
+        private readonly Func<string> timestampProvider;
+        private readonly Func<string> nonceProvider;
 
         public OAuth1(string consumerKey, string consumerSecret, string accessKey, string accessSecret)
+            : this(consumerKey, consumerSecret, accessKey, accessSecret, CreateTimestamp, CreateNonce)
+        {
+        }
+
+        /// <summary>
+        /// テスト用にタイムスタンプ・nonceの生成を差し替えられるコンストラクタ
+        /// （署名は両値に依存するため、固定しないと出力を検証できない）
+        /// </summary>
+        internal OAuth1(
+            string consumerKey, string consumerSecret, string accessKey, string accessSecret,
+            Func<string> timestampProvider, Func<string> nonceProvider)
         {
             this.consumerKey = consumerKey;
             this.consumerSecret = consumerSecret;
             this.accessKey = accessKey;
             this.accessSecret = accessSecret;
+            this.timestampProvider = timestampProvider;
+            this.nonceProvider = nonceProvider;
         }
 
         public string CreateAuthorizationData(string endpoint)
         {
-            string timstamp = this.CreateTimestamp();
-            string nonce = this.CreateNonce();
+            string timstamp = this.timestampProvider();
+            string nonce = this.nonceProvider();
             string signatureBase64 = this.CreateSignature(endpoint, "POST", nonce, timstamp);
             return $@"oauth_consumer_key=""{Uri.EscapeDataString(this.consumerKey)}""" +
                     $@",oauth_token=""{Uri.EscapeDataString(this.accessKey)}""" +
@@ -60,14 +75,14 @@ namespace TwitterMlbBot.Authorization
             }
         }
 
-        private string CreateTimestamp()
+        private static string CreateTimestamp()
         {
             // OAuth 1.0a では時刻をUNIXタイムスタンプ（切り捨て）で指定する必要がある
             // X APIは未来のタイムスタンプを不正なリクエストとして弾くため、確実に時刻の切り捨てが行われるようにする
             return DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         }
 
-        private string CreateNonce()
+        private static string CreateNonce()
         {
             // 同一ミリ秒での衝突が理論上ありうるTicksではなく、一意性が保証されるGUIDを使う
             return Guid.NewGuid().ToString("N");

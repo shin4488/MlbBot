@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using TwitterMlbBot;
 using TwitterMlbBot.Composing;
 using TwitterMlbBot.Mlb;
@@ -57,12 +58,15 @@ public class BotRunnerTest
         };
     }
 
+    private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
+
     private static BotRunner CreateRunner(List<TeamStanding> standings, FakeTweetSender sender)
     {
         return new BotRunner(
             new FakeStandingsProvider(standings),
             new TweetComposer(new HashtagProvider()),
-            sender);
+            sender,
+            NullLogger<BotRunner>.Instance);
     }
 
     [Fact]
@@ -70,7 +74,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate);
 
         Assert.Equal(2, sender.SentContents.Count);
         Assert.Contains(sender.SentContents, content => content.Contains("White Sox"));
@@ -82,7 +86,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026);
+        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026, testDate);
 
         Assert.Empty(sender.SentContents);
     }
@@ -93,7 +97,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender(_ => false);
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026));
+            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate));
     }
 
     [Fact]
@@ -102,7 +106,7 @@ public class BotRunnerTest
         // 重複コンテンツ拒否など、一部失敗は正常系でも起きるため
         var sender = new FakeTweetSender(content => content.Contains("Dodgers"));
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate);
 
         Assert.Equal(2, sender.SentContents.Count);
     }

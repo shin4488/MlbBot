@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TwitterMlbBot.Authorization;
 using TwitterMlbBot.Composing;
 using TwitterMlbBot.Mlb;
@@ -22,19 +23,31 @@ namespace TwitterMlbBot
         {
             RunOptions options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
 
+            // Lambda環境ではコンソール出力がそのままCloudWatch Logsに流れる
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+                builder.AddSimpleConsole(console => console.SingleLine = true));
+
             // 依存関係の組み立て
             // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）
-            IStandingsProvider standingsProvider = new MlbApiClient(RequireEnvironmentVariable("MLB_API_KEY"));
+            IStandingsProvider standingsProvider = new MlbApiClient(
+                RequireEnvironmentVariable("MLB_API_KEY"),
+                loggerFactory.CreateLogger<MlbApiClient>());
             ITweetSender tweetSender = options.DryRun
                 ? new DryRunTweetSender()
-                : new TwitterApiSender(new OAuth1(
-                    RequireEnvironmentVariable("CONSUMER_KEY"),
-                    RequireEnvironmentVariable("CONSUMER_SECRET"),
-                    RequireEnvironmentVariable("ACCESS_KEY"),
-                    RequireEnvironmentVariable("ACCESS_SECRET")));
-            BotRunner runner = new BotRunner(standingsProvider, new TweetComposer(new HashtagProvider()), tweetSender);
+                : new TwitterApiSender(
+                    new OAuth1(
+                        RequireEnvironmentVariable("CONSUMER_KEY"),
+                        RequireEnvironmentVariable("CONSUMER_SECRET"),
+                        RequireEnvironmentVariable("ACCESS_KEY"),
+                        RequireEnvironmentVariable("ACCESS_SECRET")),
+                    loggerFactory.CreateLogger<TwitterApiSender>());
+            BotRunner runner = new BotRunner(
+                standingsProvider,
+                new TweetComposer(new HashtagProvider()),
+                tweetSender,
+                loggerFactory.CreateLogger<BotRunner>());
 
-            await runner.RunAsync(options.Year);
+            await runner.RunAsync(options.Year, options.Date);
         }
 
         /// <summary>
