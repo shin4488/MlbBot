@@ -3,8 +3,7 @@
 現状のツイートは地区ごとに以下の形式（毎日6件）。X APIは投稿ごとの従量課金（$0.015/件）のため、ツイート件数が増える案はコスト増とセットで判断する。
 
 ```
-📅 8/30 ⚾ AL East
-W-L (GB)
+📅 8/30 ⚾ AL East ⚾ W-L (GB)
 1. Yankees 82-53
 2. Blue Jays 79-56 (3)
 3. Red Sox 76-60 (6.5)
@@ -70,7 +69,7 @@ sportsdata.ioのレスポンスには未使用のデータが多い（`TeamStand
 各地区ツイートの末尾に、Claude API（Haiku）で生成した一言コメントを付ける案。
 
 ```
-📅 8/30 ⚾ AL East
+📅 8/30 ⚾ AL East ⚾ W-L (GB)
 1. Yankees 82-53 🔥W4
 2. Blue Jays 79-56 (3)
 ...

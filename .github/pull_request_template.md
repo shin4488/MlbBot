@@ -9,8 +9,7 @@
 MLB_API_KEY=xxx DRY_RUN=true で実行し、6地区分の文面が出力されることを確認
 
 ----- dry-run: 以下はツイートされません（xx文字） -----
-📅 8/30 ⚾ AL East
-W-L (GB)
+📅 8/30 ⚾ AL East ⚾ W-L (GB)
 1. Yankees 82-53
 ...
 -->
