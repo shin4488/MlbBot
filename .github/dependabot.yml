@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # NuGetパッケージの定期更新（セキュリティアラート由来だけでなく通常の更新も拾う）
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: monthly
+
+  # GitHub Actionsのバージョン更新
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

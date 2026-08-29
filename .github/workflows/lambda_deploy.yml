@@ -8,33 +8,58 @@ on:
       - '.gitignore'
       - '.github/**'
       - '.vscode/**'
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
 
+# 連続pushされても直列にデプロイし、実行中のデプロイは中断しない
+concurrency:
+  group: lambda-deploy
+  cancel-in-progress: false
+
+jobs:
+  # ビルド・テストが通らないコードを本番にデプロイしないためのゲート
+  verify:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Build
+        run: dotnet build MlbBot.sln --configuration Release
+
+      - name: Test
+        run: dotnet test MlbBot.sln --configuration Release --no-build
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '6.0.x'
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '6.0.x'
+      - name: Publish
+        # Debugビルドではなく最適化されたReleaseを配置する
+        # （csprojのPublishReadyToRunはpublish時のみ有効になり、コールドスタートも改善される）
+        run: dotnet publish TwitterMlbBotExecution/src/TwitterMlbBotExecution --configuration Release --runtime linux-x64 --self-contained false --output publish
 
-      - name: Build
-        run: |
-          dotnet build ${GITHUB_WORKSPACE}
-          (cd ${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0 && zip -r TwitterMlbBotExecution.zip .)
+      - name: Package
+        run: cd publish && zip -r ../TwitterMlbBotExecution.zip .
 
       - name: Deploy
-        # デプロイ結果のoutputはターミナルに表示したくないため、いったんファイルに出力させてそのファイルをすぐ削除している
-        run: |
-          aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://${GITHUB_WORKSPACE}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0/TwitterMlbBotExecution.zip --publish >> deploy.log
-          rm deploy.log
+        # update-function-codeのレスポンスには関数設定（環境変数名など）が含まれるためログに出力しない
+        run: aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish > /dev/null
