@@ -42,7 +42,3 @@ steps:
 ```
 
 `AnalysisLevel` / `EnforceCodeStyleInBuild` の有効化で警告が発生した場合は、その解消とセットで実施する。
-
-## 3. branch protection（優先度: 低・任意）
-
-masterへの直push＝即本番デプロイの構成なので、GitHubのリポジトリ設定でPR必須 + CI必須にすると事故が減る。単独開発のため運用ルール（必ずPRを切る）でも代替可能。設定する場合: Settings → Branches → Add branch protection rule（`master`、Require a pull request / Require status checks: `build-and-test`）。
