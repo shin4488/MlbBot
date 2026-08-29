@@ -34,9 +34,7 @@ namespace TwitterMlbBot.Twitter
         /// <param name="param">データ</param>
         public async Task CreateTweet(Param param)
         {
-            // 最初に今日の日付のみツイートする
-            string todayDate = DateTime.Now.ToShortDateString();
-            List<string> targetTweetContentList = new List<string> { todayDate };
+            List<string> targetTweetContentList = new List<string>();
 
             foreach (ParamByKey teamsByKey in param.TeamsList)
             {
@@ -66,8 +64,7 @@ namespace TwitterMlbBot.Twitter
             }
 
             // 順位データが存在する場合のみ、一斉にツイート実行
-            // 順位データが存在しない場合は、日付データのみリストに保持されているため、要素数1となる
-            if (targetTweetContentList.Count <= 1)
+            if (targetTweetContentList.Count == 0)
             {
                 return;
             }
