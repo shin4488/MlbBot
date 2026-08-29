@@ -6,7 +6,7 @@ using TwitterMlbBot.Mlb;
 namespace TwitterMlbBot.Composing
 {
     /// <summary>
-    /// 順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
+    /// 地区順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
     /// 地区分け・順位付けはDivisionStandingが担い、このクラスは文面の見た目だけに責任を持つ
     /// </summary>
     internal class TweetComposer
@@ -21,13 +21,13 @@ namespace TwitterMlbBot.Composing
         }
 
         /// <summary>
-        /// 順位データを地区ごとのツイート文面リストに変換する
+        /// 地区順位表をツイート文面リストに変換する
         /// </summary>
-        /// <param name="standings">全チームの順位データ</param>
-        /// <returns>地区ごとのツイート文面（順位データが空の場合は空リスト）</returns>
-        public IReadOnlyList<string> Compose(IReadOnlyList<TeamStanding> standings)
+        /// <param name="divisions">地区ごとの順位表</param>
+        /// <returns>地区ごとのツイート文面（順位表が空の場合は空リスト）</returns>
+        public IReadOnlyList<TweetContent> Compose(IReadOnlyList<DivisionStanding> divisions)
         {
-            return DivisionStanding.FromStandings(standings)
+            return divisions
                 .Select(ComposeDivisionTweet)
                 .ToList();
         }
@@ -35,7 +35,7 @@ namespace TwitterMlbBot.Composing
         /// <summary>
         /// 1地区分のツイート文面を組み立てる
         /// </summary>
-        private string ComposeDivisionTweet(DivisionStanding division)
+        private TweetContent ComposeDivisionTweet(DivisionStanding division)
         {
             var buffer = new StringBuilder();
             buffer
@@ -47,25 +47,23 @@ namespace TwitterMlbBot.Composing
                 .AppendLine("Win : Loss : Behind");
 
             // ツイート文は「<順位>. <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
-            int ranking = 0;
-            foreach (TeamStanding team in division.RankedTeams)
+            foreach (RankedTeam rankedTeam in division.RankedTeams)
             {
-                ranking++;
                 buffer
-                    .Append(ranking.ToString()).Append(". ")
-                    .Append(team.Name.PadRight(teamNamePadding)).Append(" : ")
-                    .Append(team.Wins.ToString().PadRight(digitPadding)).Append(" : ")
-                    .Append(team.Losses.ToString().PadRight(digitPadding)).Append(" : ")
-                    .AppendLine(team.GamesBehind.ToString());
+                    .Append(rankedTeam.Rank.ToString()).Append(". ")
+                    .Append(rankedTeam.Team.Name.PadRight(teamNamePadding)).Append(" : ")
+                    .Append(rankedTeam.Team.Wins.ToString().PadRight(digitPadding)).Append(" : ")
+                    .Append(rankedTeam.Team.Losses.ToString().PadRight(digitPadding)).Append(" : ")
+                    .AppendLine(rankedTeam.Team.GamesBehind.ToString());
             }
 
             // 「#MLB #<1位チームタグ> #<2位チームタグ>」をタグ付けメッセージとする
             buffer.Append("#MLB");
-            foreach (TeamStanding topTeam in division.RankedTeams.Take(2))
+            foreach (RankedTeam topTeam in division.RankedTeams.Take(2))
             {
-                buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(topTeam.Name));
+                buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(topTeam.Team.Name));
             }
-            return buffer.ToString();
+            return new TweetContent(buffer.ToString());
         }
     }
 }

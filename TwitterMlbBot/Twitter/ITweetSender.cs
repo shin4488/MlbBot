@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using TwitterMlbBot.Composing;
 
 namespace TwitterMlbBot.Twitter
 {
@@ -12,6 +13,6 @@ namespace TwitterMlbBot.Twitter
         /// </summary>
         /// <param name="tweetContent">ツイート文面</param>
         /// <returns>送信に成功した場合はtrue</returns>
-        Task<bool> SendAsync(string tweetContent);
+        Task<bool> SendAsync(TweetContent tweetContent);
     }
 }

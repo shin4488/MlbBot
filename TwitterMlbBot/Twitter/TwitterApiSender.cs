@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using TwitterMlbBot.Authorization;
+using TwitterMlbBot.Composing;
 
 namespace TwitterMlbBot.Twitter
 {
@@ -28,11 +29,11 @@ namespace TwitterMlbBot.Twitter
             this.authorization = authorization;
         }
 
-        public async Task<bool> SendAsync(string tweetContent)
+        public async Task<bool> SendAsync(TweetContent tweetContent)
         {
             // 各リクエストごとに新しいタイムスタンプとnonceを含んだOAuth署名を生成する
             string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
-            string requestBody = JsonSerializer.Serialize(new { text = tweetContent });
+            string requestBody = JsonSerializer.Serialize(new { text = tweetContent.Text });
             using var request = new HttpRequestMessage(HttpMethod.Post, twitterEndpoint);
             request.Headers.ExpectContinue = false; // X API側の503対策として `Expect: 100-continue` を無効化
             request.Headers.Add("Authorization", $"OAuth {authorizationContent}");

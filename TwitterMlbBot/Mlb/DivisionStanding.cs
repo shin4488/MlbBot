@@ -23,9 +23,9 @@ namespace TwitterMlbBot.Mlb
         /// <summary>
         /// 順位順（1位から）のチームリスト
         /// </summary>
-        public IReadOnlyList<TeamStanding> RankedTeams { get; }
+        public IReadOnlyList<RankedTeam> RankedTeams { get; }
 
-        private DivisionStanding(string league, string division, IReadOnlyList<TeamStanding> rankedTeams)
+        private DivisionStanding(string league, string division, IReadOnlyList<RankedTeam> rankedTeams)
         {
             League = league;
             Division = division;
@@ -49,6 +49,7 @@ namespace TwitterMlbBot.Mlb
                     teams
                         .OrderByDescending(team => team.Percentage)
                         .ThenByDescending(team => team.Wins)
+                        .Select((team, index) => new RankedTeam(index + 1, team))
                         .ToList()))
                 .ToList();
         }

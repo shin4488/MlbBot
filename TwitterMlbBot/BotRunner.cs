@@ -8,7 +8,7 @@ using TwitterMlbBot.Twitter;
 namespace TwitterMlbBot
 {
     /// <summary>
-    /// 「順位取得 → 文面組み立て → 送信」のオーケストレーションだけを持つクラス
+    /// 「順位取得 → 地区順位表化 → 文面組み立て → 送信」のオーケストレーションだけを持つクラス
     /// </summary>
     internal class BotRunner
     {
@@ -30,7 +30,8 @@ namespace TwitterMlbBot
         public async Task RunAsync(int year)
         {
             List<TeamStanding> standings = await this.standingsProvider.GetStandingsAsync(year);
-            IReadOnlyList<string> tweetContentList = this.composer.Compose(standings);
+            IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
+            IReadOnlyList<TweetContent> tweetContentList = this.composer.Compose(divisions);
 
             // 順位データが存在しない場合（シーズンオフ等）はツイートしない
             if (tweetContentList.Count == 0)
@@ -39,8 +40,14 @@ namespace TwitterMlbBot
             }
 
             int successCount = 0;
-            foreach (string tweetContent in tweetContentList)
+            foreach (TweetContent tweetContent in tweetContentList)
             {
+                if (tweetContent.ExceedsCharacterLimit)
+                {
+                    // Xの実際の判定は重み付きの独自カウントのため、ここでは送信を止めず警告のみ出す
+                    Console.WriteLine(
+                        $"警告: 文面が上限（{TweetContent.CharacterLimit}字）を超えている可能性があります（{tweetContent.CharacterCount}字）");
+                }
                 if (await this.tweetSender.SendAsync(tweetContent))
                 {
                     successCount++;

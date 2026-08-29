@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using TwitterMlbBot.Composing;
 
 namespace TwitterMlbBot.Twitter
 {
@@ -8,10 +9,10 @@ namespace TwitterMlbBot.Twitter
     /// </summary>
     internal class DryRunTweetSender : ITweetSender
     {
-        public Task<bool> SendAsync(string tweetContent)
+        public Task<bool> SendAsync(TweetContent tweetContent)
         {
-            Console.WriteLine($"----- dry-run: 以下はツイートされません（{tweetContent.Length}文字） -----");
-            Console.WriteLine(tweetContent);
+            Console.WriteLine($"----- dry-run: 以下はツイートされません（{tweetContent.CharacterCount}文字） -----");
+            Console.WriteLine(tweetContent.Text);
             return Task.FromResult(true);
         }
     }
