@@ -4,6 +4,7 @@
 
 ```
 📅 8/30 ⚾ AL East
+W-L (GB)
 1. Yankees 82-53
 2. Blue Jays 79-56 (3)
 3. Red Sox 76-60 (6.5)

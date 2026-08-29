@@ -47,6 +47,8 @@ namespace TwitterMlbBot.Composing
                 .Append(division.League)
                 .Append(' ')
                 .AppendLine(division.Division);
+            // 数字の意味が読み取れるよう凡例を1行入れる（読者は英語圏想定のため文面は英語で統一）
+            buffer.AppendLine("W-L (GB)");
 
             // Xはプロポーショナルフォント表示のため、空白での桁揃えは効かない。
             // 「<順位>. <チーム名> <勝ち数>-<負け数> (<ゲーム差>)」の区切り文字形式とし、首位のゲーム差は表示しない

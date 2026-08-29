@@ -8,7 +8,7 @@ namespace TwitterMlbBot
     /// </summary>
     /// <param name="DryRun">ツイートせず文面をコンソール出力するのみとするか</param>
     /// <param name="Year">順位データの対象年（西暦）</param>
-    /// <param name="Date">ツイート文面に表示する日付（日本時間）</param>
+    /// <param name="Date">ツイート文面に表示する日付（直近の試合日 = アメリカの日付 = 日本時間の前日）</param>
     internal record RunOptions(bool DryRun, int Year, DateOnly Date)
     {
         private static readonly TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
@@ -30,6 +30,8 @@ namespace TwitterMlbBot
                 || string.Equals(dryRunEnvironmentValue, "true", StringComparison.OrdinalIgnoreCase);
 
             DateOnly jstToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, jst));
+            // 表示する順位は前夜（アメリカ時間）の試合結果のため、日付も試合日＝日本時間の前日に合わせる
+            DateOnly gameDate = jstToday.AddDays(-1);
 
             int year = arguments
                 .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
@@ -39,7 +41,7 @@ namespace TwitterMlbBot
                 year = jstToday.Year;
             }
 
-            return new RunOptions(dryRun, year, jstToday);
+            return new RunOptions(dryRun, year, gameDate);
         }
     }
 }

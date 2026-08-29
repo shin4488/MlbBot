@@ -68,6 +68,19 @@ public class TweetComposerTest
     }
 
     [Fact]
+    public void Compose_数字の意味がわかる凡例が入る()
+    {
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+        };
+
+        string text = Assert.Single(Compose(standings)).Text;
+
+        Assert.Contains("W-L (GB)", text);
+    }
+
+    [Fact]
     public void Compose_勝敗数がハイフン連結で入る()
     {
         var standings = new List<TeamStanding>
