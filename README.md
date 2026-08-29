@@ -93,7 +93,7 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 GitHub Secrets（Actionsデプロイ用）:
 
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` … デプロイ用IAMユーザーの認証情報
-- `AWS_REGION` … `ap-northeast-1`
+- `AWS_REGION` … デプロイ先のAWSリージョン
 - `AWS_LAMBDA_FUNCTION_NAME` … デプロイ先Lambda関数名
 
 Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECRET`, `ACCESS_KEY`, `ACCESS_SECRET`
@@ -103,4 +103,4 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [docs/infrastructure.md](docs/infrastructure.md) … インフラのTerraform化方針
+- [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク
