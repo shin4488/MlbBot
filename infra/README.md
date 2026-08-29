@@ -35,7 +35,7 @@ flowchart LR
         TFR["Terraform実行用ロール<br>（AssumeRole方式）"]
     end
     GH["GitHub Actions<br>lambda_deploy.yml"] -->|update-function-code<br>（Terraform管理外）| L
-    GH -.->|OIDC認証（切替後）| OIDC
+    GH -->|OIDC認証で一時クレデンシャル取得| OIDC
 ```
 
 - Lambdaの**コード関連属性と環境変数は `ignore_changes` で管理外**（コードはActionsがデプロイ、APIキーはLambda側で直接管理し `.tf` に書かない）
@@ -66,9 +66,9 @@ terraform fmt -recursive && terraform validate   # コミット前
 
 ## 運用メモ
 
-- アラームのメール通知は、apply後にAWSから届く確認メールの「Confirm subscription」を承認するまで有効にならない
-- デプロイのOIDC切替は「apply → GitHub Secretsに `AWS_DEPLOY_ROLE_ARN`（デプロイ用ロールのARN）を登録 → ワークフローをOIDC認証へ変更するPR」の順で行う
-- Terraform実行用ロールを使う場合は `~/.aws/config` にAssumeRoleプロファイルを追加する（ロールARNは環境固有情報のためここには書かない。`terraform output` や AWSコンソールで確認する）
+- アラームのメール通知は、SNS購読の確認メールを承認するまで有効にならない（購読を作り直した場合も同様）
+- デプロイはOIDC認証（GitHub Secretsの `AWS_DEPLOY_ROLE_ARN` でロール指定）。ロールの信頼はmasterブランチ限定のため、他ブランチからの `workflow_dispatch` は認証段階で拒否される
+- Terraform実行用ロールを使う場合は `~/.aws/config` にAssumeRoleプロファイルを追加する（ロールARNは環境固有情報のためここには書かない。AWSコンソールで確認する）
 
 ## 次の対応候補
 
