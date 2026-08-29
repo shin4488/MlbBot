@@ -1,0 +1,5 @@
+# このファイルを terraform.tfvars にコピーして実際の値を記入する
+# （terraform.tfvarsはgitignore対象。環境固有の情報は公開リポジトリにコミットしない）
+# 下の値はダミー。書き換えずに実行すると無効なリージョンとしてエラーになる（書き換え忘れ防止）
+
+aws_region = "your-aws-region"

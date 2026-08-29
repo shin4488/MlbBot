@@ -63,4 +63,4 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（OIDC化 / 共通設定一元化 等）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [docs/infrastructure.md](docs/infrastructure.md) … インフラのTerraform化方針（OIDC化・タイムアウト調整・アラームはTerraform化後に対応）
+- [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク（OIDC化・タイムアウト調整・アラーム等）

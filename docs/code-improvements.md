@@ -14,7 +14,7 @@
 1. 一時的エラーにリトライを入れる。手書きでもよいが `Polly` を使うと簡潔（`WaitAndRetryAsync(3回, 指数バックオフ)`）。
 2. リトライ分の実行時間を確保するため、Lambdaタイムアウト（現状15秒）を60秒程度へ引き上げる。
 
-**対応時期**: Lambdaタイムアウト変更というインフラ設定変更を伴うため、**Terraform化（[docs/infrastructure.md](infrastructure.md)）が完了してから**実施する。
+**対応時期**: Lambdaタイムアウト変更というインフラ設定変更を伴うため、**Terraform（[infra/](../infra/README.md)）でのタイムアウト変更とセットで**実施する。
 
 ## 2. ロギングの整備
 

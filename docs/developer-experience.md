@@ -14,7 +14,7 @@ steps:
   - uses: aws-actions/configure-aws-credentials@<SHA固定> # 現行規約に合わせcommit hashで指定
     with:
       role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-      aws-region: ap-northeast-1
+      aws-region: ${{ secrets.AWS_REGION }}
 ```
 
 事前にIAMリソースの作成が必要:
@@ -23,7 +23,7 @@ steps:
 2. このリポジトリのmasterブランチに限定した信頼ポリシーを持つIAMロールを作成（権限は `lambda:UpdateFunctionCode` のみに絞る）
 3. 切り替え後、旧IAMユーザーのアクセスキーを無効化・削除
 
-**対応時期**: 上記IAMリソースはコード管理下で作るべきなので、**Terraform化（[docs/infrastructure.md](infrastructure.md)）が完了してから**Terraformで作成して対応する。
+**対応時期**: 上記IAMリソースはコード管理下で作るべきなので、**Terraform（[infra/](../infra/README.md)）で作成して**対応する。
 
 ## 2. Directory.Build.props による共通設定の一元化（優先度: 低）
 

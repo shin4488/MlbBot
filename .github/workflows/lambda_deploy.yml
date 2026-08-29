@@ -8,6 +8,8 @@ on:
       - '.gitignore'
       - '.github/**'
       - '.vscode/**'
+      # インフラ定義の変更は関数コードに影響しない（適用はterraform applyで行う）
+      - 'infra/**'
   # 手動実行。ワークフローのみの変更は.github/**がpaths-ignoreのため自動では走らず、動作確認はこちらを使う
   workflow_dispatch:
 

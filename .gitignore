@@ -1,3 +1,14 @@
 .vs
 obj
 bin
+
+# Terraform（stateにはLambda環境変数の値が平文で入るため、コミット厳禁）
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# 環境固有の値（バケット名・リージョン等）は公開リポジトリにコミットしない（.exampleを雛形として使う）
+backend.hcl
+terraform.tfvars
+*.auto.tfvars
