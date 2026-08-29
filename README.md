@@ -6,7 +6,7 @@ MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先
 
 ```mermaid
 flowchart LR
-    EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet6)"]
+    EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
     L --> MLB["sportsdata.io<br>MLB順位データ取得"]
     L --> X["X API v2<br>地区ごとに6ツイート投稿"]
 ```
@@ -17,7 +17,7 @@ flowchart LR
 
 ## ローカルセットアップ
 
-必要なもの: .NET 6 SDK
+必要なもの: .NET 10 SDK（使用バージョンは [global.json](global.json) で10.0系に固定している）
 
 ```bash
 dotnet build MlbBot.sln
@@ -37,14 +37,18 @@ App.configが無い場合は環境変数へフォールバックする（Lambda�
 
 ## 実行方法
 
-本体プロジェクトはクラスライブラリのため `dotnet run` では起動できない。VSCodeのlaunch構成（Lambda Test Tool）から実行する。
+通常送信（実ツイート）はLambdaの定期実行経由のみとする。ローカルではドライランで文面を確認する。
 
 ### ドライラン（ツイートせず文面だけ確認する）
 
 `--dry-run` 引数、または環境変数 `DRY_RUN=true` で、ツイートせずに文面をコンソール出力する。
 ドライラン時はX APIの認証情報を読み込まないため、`MLB_API_KEY` だけで動く。
 
-- VSCode: launch構成「Lambda Function (dry-run / ツイートしない)」を実行
+```bash
+MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
+```
+
+- VSCode: launch構成「TwitterMlbBot (dry-run / ツイートしない)」を実行
 - 出力例: `----- dry-run: 以下はツイートされません（xx文字） -----` に続けて各地区の文面
 
 ## ⚠️ 注意事項
@@ -68,4 +72,3 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [docs/dependency-upgrades.md](docs/dependency-upgrades.md) … .NET 10移行・パッケージ更新の計画

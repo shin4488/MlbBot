@@ -12,7 +12,7 @@ EventBridge → Lambda (TwitterMlbBotExecution.Function)
        └→ Twitter.TwitterService … 文面組み立て + X API v2 (OAuth1.0a署名) でツイート
 ```
 
-- `TwitterMlbBot/` … 本体ロジック（OutputType=Library。`dotnet run` では起動できない。実行はVSCodeのlaunch設定 or Lambda経由）
+- `TwitterMlbBot/` … 本体ロジック（OutputType=Exe。ローカル実行は `dotnet run --project TwitterMlbBot -- --dry-run`）
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
 - `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、ドライラン等の純粋な単体テスト
 
@@ -24,7 +24,7 @@ dotnet test MlbBot.sln      # 安全（実ツイートするFunctionTestはSkip�
 dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-changes で検証する）
 ```
 
-- ターゲットは net6.0（3プロジェクトすべて）
+- ターゲットは net10.0（3プロジェクトすべて）。SDKは `global.json` で10.0系に固定
 - コード内コメント・コミットメッセージのスタイルは日本語
 - `.editorconfig` は最小構成。C#スタイルはRoslyn / dotnet format の既定値に任せる方針
 - **テストは仕様ベースで書く**: 文面フォーマットの詳細・内部実装・具体的な例外型など変わりやすいものに依存させず、入出力の不変条件（データが文面に反映される、ツイートされない等）を検証する。リファクタや文面変更のたびにテストを直さなくて済む状態を保つ
@@ -32,7 +32,7 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 ## ドライラン（ツイートせずに文面確認）
 
 `--dry-run` 引数、または環境変数 `DRY_RUN=true` で、ツイートせず文面をコンソール出力する。
-ドライラン時はX API認証情報を読み込まず `ExecuteTweet` も例外で拒否する二重ガードのため、誤投稿は構造的に起きない（必要なのは `MLB_API_KEY` のみ）。VSCodeのlaunch構成「Lambda Function (dry-run / ツイートしない)」から実行できる。
+ドライラン時はX API認証情報を読み込まず `ExecuteTweet` も例外で拒否する二重ガードのため、誤投稿は構造的に起きない（必要なのは `MLB_API_KEY` のみ）。`dotnet run --project TwitterMlbBot -- --dry-run`、またはVSCodeのlaunch構成「TwitterMlbBot (dry-run / ツイートしない)」で実行できる。
 
 ## ⚠️ 重要な注意事項
 
@@ -60,4 +60,3 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
 - [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（.NET 10移行 / OIDC化 / user-secrets 等）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [docs/dependency-upgrades.md](docs/dependency-upgrades.md) … .NET 10移行・パッケージ更新の計画（期限: Lambda dotnet6は2027-02-01に更新ブロック。ローカルに.NET 10 SDKのインストールが必要）
