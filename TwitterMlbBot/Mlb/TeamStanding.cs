@@ -1,45 +1,50 @@
 namespace TwitterMlbBot.Mlb
 {
     /// <summary>
-    /// MLB APIレスポンスのチーム順位データ
+    /// MLB APIレスポンスのチーム順位データ（不変）
     /// 使用するプロパティのみ定義する（未定義の項目はデシリアライズ時に無視される。
     /// APIが返す全項目は docs/tweet-content-ideas.md 項目4の表を参照）
     /// </summary>
-    internal class TeamStanding
+    internal record TeamStanding
     {
         /// <summary>
         /// チーム名（例: "Yankees"）
         /// </summary>
-        public string Name { get; set; } = "";
+        public string Name { get; init; } = "";
 
         /// <summary>
         /// リーグ名（"AL" / "NL"）
         /// </summary>
-        public string League { get; set; } = "";
+        public string League { get; init; } = "";
 
         /// <summary>
         /// 地区名（"East" / "Central" / "West"。All-Star擬似チームのみリーグ名と同名）
         /// </summary>
-        public string Division { get; set; } = "";
+        public string Division { get; init; } = "";
 
         /// <summary>
         /// 勝ち数
         /// </summary>
-        public int Wins { get; set; }
+        public int Wins { get; init; }
 
         /// <summary>
         /// 負け数
         /// </summary>
-        public int Losses { get; set; }
+        public int Losses { get; init; }
 
         /// <summary>
         /// 勝率
         /// </summary>
-        public double Percentage { get; set; }
+        public double Percentage { get; init; }
 
         /// <summary>
         /// 1つ上の順位のチームとのゲーム差
         /// </summary>
-        public float? GamesBehind { get; set; }
+        public float? GamesBehind { get; init; }
+
+        /// <summary>
+        /// All-Star用の擬似チームかどうか（リーグ名と地区名が同一になるのが特徴）
+        /// </summary>
+        public bool IsAllStarPseudoTeam => League == Division;
     }
 }

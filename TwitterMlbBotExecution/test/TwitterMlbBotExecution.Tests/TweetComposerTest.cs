@@ -130,8 +130,7 @@ public class TweetComposerTest
             CreateTeam("NL", "West", "Guardians", 98, 64, 0.605),
             CreateTeam("NL", "West", "Nationals", 97, 65, 0.599),
             CreateTeam("NL", "West", "Twins", 96, 66, 0.593),
-        };
-        standings.ForEach(team => team.GamesBehind = 10.5f);
+        }.Select(team => team with { GamesBehind = 10.5f }).ToList();
 
         var tweets = new TweetComposer(new HashtagProvider()).Compose(standings);
 

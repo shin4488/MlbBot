@@ -50,9 +50,8 @@ namespace TwitterMlbBot
             Console.WriteLine($"Tweets sent: {successCount}/{tweetContentList.Count}");
             if (successCount == 0)
             {
-                // 全件失敗はLambda実行をエラーで終わらせ、CloudWatchのエラーメトリクスで検知できるようにする
-                // （一部失敗は重複コンテンツ拒否など正常系でも起きるため、エラーにしない）
-                throw new Exception($"ツイートが全{tweetContentList.Count}件失敗しました。失敗理由は直前のログを参照。");
+                // 一部失敗は重複コンテンツ拒否など正常系でも起きるため、全件失敗のみエラーにする
+                throw new AllTweetsFailedException(tweetContentList.Count);
             }
         }
     }

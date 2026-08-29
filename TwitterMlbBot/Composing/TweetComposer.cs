@@ -6,7 +6,8 @@ using TwitterMlbBot.Mlb;
 namespace TwitterMlbBot.Composing
 {
     /// <summary>
-    /// 順位データから地区ごとのツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
+    /// 順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
+    /// 地区分け・順位付けはDivisionStandingが担い、このクラスは文面の見た目だけに責任を持つ
     /// </summary>
     internal class TweetComposer
     {
@@ -26,37 +27,28 @@ namespace TwitterMlbBot.Composing
         /// <returns>地区ごとのツイート文面（順位データが空の場合は空リスト）</returns>
         public IReadOnlyList<string> Compose(IReadOnlyList<TeamStanding> standings)
         {
-            return standings
-                .GroupBy(team => new { team.League, team.Division })
-                // All-Star用の擬似チームは「リーグ: AL, 地区: AL」のようにリーグ名と地区名が同一になるため除外する
-                .Where(teams => teams.Key.League != teams.Key.Division)
-                .Select(teams => ComposeDivisionTweet(teams.Key.League, teams.Key.Division, teams))
+            return DivisionStanding.FromStandings(standings)
+                .Select(ComposeDivisionTweet)
                 .ToList();
         }
 
         /// <summary>
         /// 1地区分のツイート文面を組み立てる
         /// </summary>
-        private string ComposeDivisionTweet(string league, string division, IEnumerable<TeamStanding> teams)
+        private string ComposeDivisionTweet(DivisionStanding division)
         {
-            // APIレスポンスの並び順には依存せず、勝率降順（同率なら勝ち数降順）で順位を決める
-            List<TeamStanding> rankedTeams = teams
-                .OrderByDescending(team => team.Percentage)
-                .ThenByDescending(team => team.Wins)
-                .ToList();
-
             var buffer = new StringBuilder();
             buffer
                 .Append("⚾ ")
-                .Append(league)
+                .Append(division.League)
                 .Append(" | ")
-                .Append(division)
+                .Append(division.Division)
                 .Append(" ⚾️ ")
                 .AppendLine("Win : Loss : Behind");
 
             // ツイート文は「<順位>. <チーム名> : <勝ち数> : <負け数> : <ゲーム差>」
             int ranking = 0;
-            foreach (TeamStanding team in rankedTeams)
+            foreach (TeamStanding team in division.RankedTeams)
             {
                 ranking++;
                 buffer
@@ -69,7 +61,7 @@ namespace TwitterMlbBot.Composing
 
             // 「#MLB #<1位チームタグ> #<2位チームタグ>」をタグ付けメッセージとする
             buffer.Append("#MLB");
-            foreach (TeamStanding topTeam in rankedTeams.Take(2))
+            foreach (TeamStanding topTeam in division.RankedTeams.Take(2))
             {
                 buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(topTeam.Name));
             }

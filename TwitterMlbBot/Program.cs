@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using TwitterMlbBot.Authorization;
 using TwitterMlbBot.Composing;
@@ -21,28 +20,12 @@ namespace TwitterMlbBot
         /// <returns></returns>
         public static async Task Main(string[]? args)
         {
-            string[] arguments = args ?? Array.Empty<string>();
-
-            // --dry-run指定（または環境変数DRY_RUN=true）の場合はツイートせず文面をコンソール出力するのみとする
-            // Lambda実行時はargsがnull・DRY_RUN未設定のため、通常どおりツイートされる
-            bool dryRun = arguments.Contains("--dry-run")
-                || string.Equals(Environment.GetEnvironmentVariable("DRY_RUN"), "true", StringComparison.OrdinalIgnoreCase);
-
-            // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
-            int year = arguments
-                .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
-                .FirstOrDefault(inputYear => inputYear > 0);
-            if (year == 0)
-            {
-                // Lambda実行環境の時刻はUTCのため、日本時間基準で対象年を決める
-                TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-                year = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, jst).Year;
-            }
+            RunOptions options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
 
             // 依存関係の組み立て
             // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）
             IStandingsProvider standingsProvider = new MlbApiClient(RequireEnvironmentVariable("MLB_API_KEY"));
-            ITweetSender tweetSender = dryRun
+            ITweetSender tweetSender = options.DryRun
                 ? new DryRunTweetSender()
                 : new TwitterApiSender(new OAuth1(
                     RequireEnvironmentVariable("CONSUMER_KEY"),
@@ -51,7 +34,7 @@ namespace TwitterMlbBot
                     RequireEnvironmentVariable("ACCESS_SECRET")));
             BotRunner runner = new BotRunner(standingsProvider, new TweetComposer(new HashtagProvider()), tweetSender);
 
-            await runner.RunAsync(year);
+            await runner.RunAsync(options.Year);
         }
 
         /// <summary>
