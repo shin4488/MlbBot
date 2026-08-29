@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using TwitterMlbBot.Composing;
 
 namespace TwitterMlbBot.Twitter

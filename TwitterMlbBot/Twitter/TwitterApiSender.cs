@@ -1,8 +1,5 @@
-using System;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TwitterMlbBot.Authorization;
 using TwitterMlbBot.Composing;
