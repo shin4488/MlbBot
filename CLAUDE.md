@@ -15,6 +15,7 @@ flowchart LR
 ```
 
 - `TwitterMlbBot/` … 本体ロジック（OutputType=Exe。ローカル実行は `dotnet run --project TwitterMlbBot -- --dry-run`）
+  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record・All-Star判定）、`DivisionStanding`（順位順を型で保証）、`RunOptions`（引数解析の純粋関数）
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
 - `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、純粋ロジック・オーケストレーションの単体テスト（フェイク使用・ネットワーク不要）
 

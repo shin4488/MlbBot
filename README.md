@@ -20,19 +20,22 @@ flowchart LR
 ```mermaid
 flowchart TB
     F["TwitterMlbBotExecution.Function<br>Lambdaハンドラ（薄いラッパー）"] --> P
-    P["Program.Main<br>引数解析と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>取得 → 組み立て → 送信 の流れだけを持つ"]
+    P["Program.Main<br>引数解析（RunOptions）と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>取得 → 組み立て → 送信 の流れだけを持つ"]
 
     R --> ISP([IStandingsProvider])
     R --> TC
     R --> ITS([ITweetSender])
 
-    subgraph mlb["取得（Mlb/）"]
+    subgraph mlb["取得・ドメインモデル（Mlb/）"]
         ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信"]
+        MAC --> TS["TeamStanding（不変record）<br>All-Star判定などのルールを保持"]
+        DS["DivisionStanding<br>地区順位表。順位順であることを型で保証"] --> TS
     end
 
     subgraph composing["文面組み立て（Composing/）<br>ネットワーク・設定に依存しない純粋ロジック"]
-        TC["TweetComposer<br>地区グループ化 / 勝率で順位付け / All-Star除外"] --> HP["HashtagProvider<br>公式タグマップ"]
+        TC["TweetComposer<br>文面の見た目だけに責任を持つ"] --> HP["HashtagProvider<br>公式タグマップ"]
     end
+    TC --> DS
 
     subgraph twitter["送信（Twitter/）"]
         ITS -.実装.-> TAS["TwitterApiSender<br>X API v2 + OAuth1.0a署名"]
