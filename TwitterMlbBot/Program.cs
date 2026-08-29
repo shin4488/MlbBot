@@ -1,159 +1,53 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
+using TwitterMlbBot.Authorization;
+using TwitterMlbBot.Composing;
 using TwitterMlbBot.Mlb;
 using TwitterMlbBot.Twitter;
-using System.Text.RegularExpressions;
 
 namespace TwitterMlbBot
 {
+    /// <summary>
+    /// エントリーポイント。引数解析と依存関係の組み立てだけを行い、処理本体はBotRunnerに任せる
+    /// </summary>
     public class Program
     {
-        /// <summary>
-        /// MLB公式チームハッシュタグマップ（チーム名と公式タグが異なるもののみ定義）
-        /// 毎シーズン変更の可能性があるため、ここで一元管理する
-        /// </summary>
-        private static readonly Dictionary<string, string> OfficialHashtagMap =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                { "Diamondbacks", "Dbacks" },
-                { "Braves",       "BravesCountry" },
-                { "Orioles",      "Birdland" },
-                { "Red Sox",      "DirtyWater" },
-                { "Reds",         "ATOBTTR" },
-                { "Guardians",    "GuardsBall" },
-                { "Tigers",       "DNMW" },
-                { "Phillies",     "RingTheBell" },
-                { "Royals",       "FountainsUp" },
-                { "Angels",       "RepTheHalo" },
-                { "Marlins",      "FightinFish" },
-                { "Brewers",      "ThisIsMyCrew" },
-                { "Twins",        "NoPlaceLikeHERE" },
-                { "Mets",         "LGM" },
-                { "Yankees",      "RepBX" },
-                { "Pirates",      "LetsGoBucs" },
-                { "Padres",       "ForTheFaithful" },
-                { "Mariners",     "TridentsUp" },
-                { "Giants",       "SFGiants" },
-                { "Cardinals",    "STLCards" },
-                { "Rays",         "RaysUp" },
-                { "Rangers",      "AllForTX" },
-                { "Blue Jays",    "BlueJays50" },
-                { "Nationals",    "Natitude" },
-            };
-
         /// <summary>
         /// エントリーポイント
         /// WebAPI接続の関係で非同期エントリーポイントとしている
         /// </summary>
-        /// <param name="args"></param>
+        /// <param name="args">コマンドライン引数（Lambda経由の実行ではnull）</param>
         /// <returns></returns>
-        public static async Task Main(string[] args)
+        public static async Task Main(string[]? args)
         {
-            string[] arguments = args ?? Array.Empty<string>();
+            RunOptions options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
 
-            // --dry-run指定（または環境変数DRY_RUN=true）の場合はツイートせず文面をコンソール出力するのみとする
-            // Lambda実行時はargsがnull・DRY_RUN未設定のため、通常どおりツイートされる
-            bool dryRun = arguments.Contains("--dry-run")
-                || string.Equals(Environment.GetEnvironmentVariable("DRY_RUN"), "true", StringComparison.OrdinalIgnoreCase);
+            // 依存関係の組み立て
+            // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）
+            IStandingsProvider standingsProvider = new MlbApiClient(RequireEnvironmentVariable("MLB_API_KEY"));
+            ITweetSender tweetSender = options.DryRun
+                ? new DryRunTweetSender()
+                : new TwitterApiSender(new OAuth1(
+                    RequireEnvironmentVariable("CONSUMER_KEY"),
+                    RequireEnvironmentVariable("CONSUMER_SECRET"),
+                    RequireEnvironmentVariable("ACCESS_KEY"),
+                    RequireEnvironmentVariable("ACCESS_SECRET")));
+            BotRunner runner = new BotRunner(standingsProvider, new TweetComposer(new HashtagProvider()), tweetSender);
 
-            // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
-            int year = arguments
-                .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
-                .FirstOrDefault(inputYear => inputYear > 0);
-            if (year == 0)
+            await runner.RunAsync(options.Year);
+        }
+
+        /// <summary>
+        /// 必須の環境変数を取得する。未設定の場合は原因がわかるメッセージで即座に失敗させる
+        /// </summary>
+        private static string RequireEnvironmentVariable(string name)
+        {
+            string? value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrEmpty(value))
             {
-                // Lambda実行環境の時刻はUTCのため、日本時間基準で対象年を決める
-                TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-                year = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, jst).Year;
+                throw new InvalidOperationException($"環境変数 {name} が設定されていません。");
             }
-
-            Mlb.Param mlbParam = new Mlb.Param() { Year = year };
-            MlbService mlb = new MlbService();
-            Result mlbResult = await mlb.GetStandingData(mlbParam);
-
-            // Mlbクラスの戻り値用クラスからTwitterクラスの引数用クラスへMapping
-            Twitter.Param twitterParam = MapToTwitterParam(mlbResult.ResultTeamList);
-
-            TwitterService twitter = new TwitterService(dryRun);
-            await twitter.CreateTweet(twitterParam);
+            return value;
         }
-
-        /// <summary>
-        /// 「MLBのWebAPIレスポンスのチームデータ」を「Twitter用のグループ化したチームデータ」に変換
-        /// </summary>
-        /// <param name="resultTeamList">WebAPIレスポンスのチームデータ（非グループ化）</param>
-        /// <returns></returns>
-        internal static Twitter.Param MapToTwitterParam(List<DetailResult> resultTeamList)
-        {
-            Twitter.Param twitterParam = new Twitter.Param();
-
-            // WebAPIレスポンスの順位データ（JSON）をリーグごと・地区ごとのチームリストに変換
-            var teamsListByLeageDivision = resultTeamList
-                .GroupBy(team => new { team.League, team.Division })
-                // All-Star用の擬似チームは「リーグ: AL, 地区: AL」のようにリーグ名と地区名が同一になるため除外する
-                .Where(teams => teams.Key.League != teams.Key.Division)
-                .ToList();
-
-            // キーデータ（リーグ・地区）ごとにチームデータをTwitter用Paramクラスに詰め替え
-            twitterParam.TeamsList = teamsListByLeageDivision
-                .Select(teams =>
-                {
-                    // キーデータ（リーグ・地区）のマッピング
-                    ParamByKey paramTeamListData = new ParamByKey
-                    {
-                        Key = new GroupKey(),
-                        Teams = new List<DetailParam>()
-                    };
-                    paramTeamListData.Key.League = teams.Key.League;
-                    paramTeamListData.Key.Division = teams.Key.Division;
-
-                    // チームデータのマッピング
-                    // APIレスポンスの並び順には依存せず、勝率降順（同率なら勝ち数降順）で順位を決める
-                    int ranking = 0;
-                    List<DetailParam> teamList = teams
-                    .OrderByDescending(team => team.Percentage)
-                    .ThenByDescending(team => team.Wins)
-                    .Select(team =>
-                    {
-                        DetailParam param = new DetailParam
-                        {
-                            Ranking = ++ranking,
-                            Name = team.Name,
-                            Wins = team.Wins,
-                            Losses = team.Losses,
-                            GamesBehind = team.GamesBehind
-                        };
-                        return param;
-                    }).ToList();
-                    paramTeamListData.Teams = teamList;
-                    // 「#MLB #<1位チーム名> #<2位チーム名>」をタグ付けメッセージとする
-                    paramTeamListData.TagMessage = "#MLB" +
-                        " " + GetTeamHashtags(paramTeamListData.Teams.First().Name) +
-                        " " + GetTeamHashtags(paramTeamListData.Teams[1].Name);
-                    return paramTeamListData;
-
-                }).ToList();
-
-            return twitterParam;
-        }
-
-        /// <summary>
-        /// MLBチーム名から公式Twitterハッシュタグ文字列を生成する。
-        /// 公式タグがチーム名と異なる場合は、公式タグと元チーム名の両方を返す。
-        /// </summary>
-        /// <param name="teamName">チーム名（例: "Diamondbacks"）</param>
-        /// <returns>ハッシュタグ文字列（例: "#Dbacks #Diamondbacks"）</returns>
-        private static string GetTeamHashtags(string teamName)
-        {
-            string nameNoSpace = Regex.Replace(teamName, @"\s", "");
-            return OfficialHashtagMap.TryGetValue(teamName, out string officialTag)
-                // 公式タグ + 元チーム名タグの両方を付ける
-                ? $"#{officialTag} #{nameNoSpace}"
-                // チーム名と公式タグが同じ場合はそのまま使用
-                : $"#{nameNoSpace}";
-        }
-
     }
 }

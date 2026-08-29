@@ -4,6 +4,8 @@ MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先
 
 ## アーキテクチャ
 
+### 実行環境
+
 ```mermaid
 flowchart LR
     EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
@@ -11,9 +13,35 @@ flowchart LR
     L --> X["X API v2<br>地区ごとに6ツイート投稿"]
 ```
 
-- [TwitterMlbBot/](TwitterMlbBot/) … 本体ロジック（順位取得・文面組み立て・OAuth1.0a署名・ツイート）
-- [TwitterMlbBotExecution/src/](TwitterMlbBotExecution/src/) … Lambdaハンドラ（`Program.Main` を呼ぶ薄いラッパー）
-- [TwitterMlbBotExecution/test/](TwitterMlbBotExecution/test/) … テスト（下記の注意参照）
+### 内部構造
+
+「取得 → 文面組み立て → 送信」を分離し、取得元と送信先はinterfaceで差し替え可能にしている（テスト用フェイク・ドライランは送信先の差し替えで実現）。
+
+```mermaid
+flowchart TB
+    F["TwitterMlbBotExecution.Function<br>Lambdaハンドラ（薄いラッパー）"] --> P
+    P["Program.Main<br>引数解析（RunOptions）と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>取得 → 組み立て → 送信 の流れだけを持つ"]
+
+    R --> ISP([IStandingsProvider])
+    R --> TC
+    R --> ITS([ITweetSender])
+
+    subgraph mlb["取得・ドメインモデル（Mlb/）"]
+        ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信"]
+        MAC --> TS["TeamStanding（不変record）<br>All-Star判定などのルールを保持"]
+        DS["DivisionStanding<br>地区順位表。順位順であることを型で保証"] --> TS
+    end
+
+    subgraph composing["文面組み立て（Composing/）<br>ネットワーク・設定に依存しない純粋ロジック"]
+        TC["TweetComposer<br>文面の見た目だけに責任を持つ"] --> HP["HashtagProvider<br>公式タグマップ"]
+    end
+    TC --> DS
+
+    subgraph twitter["送信（Twitter/）"]
+        ITS -.実装.-> TAS["TwitterApiSender<br>X API v2 + OAuth1.0a署名"]
+        ITS -.実装.-> DRS["DryRunTweetSender<br>コンソール出力（ドライラン時）"]
+    end
+```
 
 ## ローカルセットアップ
 
@@ -23,17 +51,18 @@ flowchart LR
 dotnet build MlbBot.sln
 ```
 
-設定値は以下のいずれかで渡す（[TwitterMlbBot/Dummy.config](TwitterMlbBot/Dummy.config) がApp.configのテンプレート。App.configはgitignore済み）:
+設定値はローカル・Lambda共通で**環境変数**で渡す:
 
-| App.configのキー | 環境変数 | 内容 |
-|---|---|---|
-| mlb.apiKey | `MLB_API_KEY` | sportsdata.io のAPIキー |
-| twitter.consumerKey | `CONSUMER_KEY` | X API Consumer Key |
-| twitter.consumerSecret | `CONSUMER_SECRET` | X API Consumer Secret |
-| twitter.accessKey | `ACCESS_KEY` | X API Access Token |
-| twitter.accessSecret | `ACCESS_SECRET` | X API Access Token Secret |
+| 環境変数 | 内容 |
+|---|---|
+| `MLB_API_KEY` | sportsdata.io のAPIキー |
+| `CONSUMER_KEY` | X API Consumer Key |
+| `CONSUMER_SECRET` | X API Consumer Secret |
+| `ACCESS_KEY` | X API Access Token |
+| `ACCESS_SECRET` | X API Access Token Secret |
+| `DRY_RUN`（任意） | `true` でドライラン |
 
-App.configが無い場合は環境変数へフォールバックする（Lambda上はこの経路）。
+必須の環境変数が未設定の場合は、変数名入りのエラーで起動時に失敗する（ドライランで必須なのは `MLB_API_KEY` のみ）。
 
 ## 実行方法
 
@@ -55,7 +84,7 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 
 1. **masterへのpush（マージ）は本番デプロイ**。[.github/workflows/lambda_deploy.yml](.github/workflows/lambda_deploy.yml) により、ビルド・テスト検証後にAWS Lambdaへ自動デプロイされる（`.md`・`.github/`・`.vscode/`・`.gitignore` のみの変更は除く）。
 2. **`FunctionTest` は手動疎通確認専用**。本番の `Program.Main` をそのまま実行するためSkip指定してある。Skipを外して実行すると実際にツイートが投稿される。
-3. **シークレットをコミットしない**。APIキーはApp.config（gitignore済み）またはLambda環境変数で管理する。
+3. **シークレットをコミットしない**。APIキーは環境変数でのみ扱い、リポジトリ内のファイルには書かない。
 
 ## デプロイに必要な設定
 

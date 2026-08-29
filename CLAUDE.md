@@ -4,17 +4,20 @@ MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上�
 
 ## アーキテクチャ
 
-```
-EventBridge → Lambda (TwitterMlbBotExecution.Function)
-  └→ TwitterMlbBot.Program.Main
-       ├→ Mlb.MlbService      … sportsdata.io API から順位データ取得
-       ├→ Program 内でマッピング・ハッシュタグ生成
-       └→ Twitter.TwitterService … 文面組み立て + X API v2 (OAuth1.0a署名) でツイート
+「取得 → 文面組み立て → 送信」を分離し、取得元・送信先はinterfaceで差し替える構成（詳細図はREADME参照）。
+
+```mermaid
+flowchart LR
+    EB["EventBridge<br>毎日06:00 UTC"] --> F["Function<br>（Lambdaハンドラ）"] --> P["Program.Main<br>引数解析・組み立て"] --> R["BotRunner<br>オーケストレーション"]
+    R --> MAC["IStandingsProvider<br>← MlbApiClient<br>(sportsdata.io)"]
+    R --> TC["TweetComposer + HashtagProvider<br>純粋ロジック（Composing/）"]
+    R --> ITS["ITweetSender<br>← TwitterApiSender (X API)<br>← DryRunTweetSender (dry-run)"]
 ```
 
 - `TwitterMlbBot/` … 本体ロジック（OutputType=Exe。ローカル実行は `dotnet run --project TwitterMlbBot -- --dry-run`）
+  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record・All-Star判定）、`DivisionStanding`（順位順を型で保証）、`RunOptions`（引数解析の純粋関数）
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
-- `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、ドライラン等の純粋な単体テスト
+- `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、純粋ロジック・オーケストレーションの単体テスト（フェイク使用・ネットワーク不要）
 
 ## ビルド・テスト
 
@@ -32,18 +35,18 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 ## ドライラン（ツイートせずに文面確認）
 
 `--dry-run` 引数、または環境変数 `DRY_RUN=true` で、ツイートせず文面をコンソール出力する。
-ドライラン時はX API認証情報を読み込まず `ExecuteTweet` も例外で拒否する二重ガードのため、誤投稿は構造的に起きない（必要なのは `MLB_API_KEY` のみ）。`dotnet run --project TwitterMlbBot -- --dry-run`、またはVSCodeのlaunch構成「TwitterMlbBot (dry-run / ツイートしない)」で実行できる。
+ドライラン時は送信先が `DryRunTweetSender`（コンソール出力のみ）に差し替わり、X API認証情報の読み込みも送信コードへの到達も起きないため、誤投稿は構造的に不可能（必要なのは `MLB_API_KEY` のみ）。`dotnet run --project TwitterMlbBot -- --dry-run`、またはVSCodeのlaunch構成「TwitterMlbBot (dry-run / ツイートしない)」で実行できる。
 
 ## ⚠️ 重要な注意事項
 
 1. **`FunctionTest` のSkipを外したまま一括実行しないこと**: 本番の `Program.Main` を直接実行するため、認証情報がある環境では実ツイートが投稿される。手動の疎通確認専用。
 2. **masterへのpush（マージ）は本番デプロイ**: `.github/workflows/lambda_deploy.yml` の verify（ビルド+テスト）通過後、Releaseの `dotnet publish` 成果物がLambdaへデプロイされる（`.md`・`.github/`・`.vscode/`・`.gitignore` のみの変更は除く）。変更は必ずPR経由にし、PRのCI（ビルド+フォーマット検証+テスト）を通すこと。
-3. **シークレットをコミットしない**: 実際のAPIキーは `TwitterMlbBot/App.config`（gitignore済み）または Lambda環境変数（`MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECRET`, `ACCESS_KEY`, `ACCESS_SECRET`）で管理。`Dummy.config` はキーを含まないテンプレート。
+3. **シークレットをコミットしない**: APIキーは環境変数（`MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECRET`, `ACCESS_KEY`, `ACCESS_SECRET`）でのみ扱い、リポジトリ内のファイルには書かない。
 4. **GitHub Actionsはcommit SHA固定**: `@v7` のようなタグではなく、フルcommit hash + バージョンコメント（例: `actions/checkout@3d3c42e... # v7.0.1`）で指定する。バージョン更新はDependabot（月次）が担う。
 
-## 設定の仕組み（現状）
+## 設定の仕組み
 
-`ProcessUtility.ReadAppConfig` がApp.configからJSON文字列を読み、Lambda上では App.config が null になるため `GetEnvVarByKey` が環境変数へフォールバックする。この「nullなら環境変数」という暗黙分岐が前提になっているので、設定関連を触るときは両方の実行経路（ローカル/Lambda）を確認すること。
+設定は**環境変数のみ**（ローカル・Lambda共通）。必須の環境変数が未設定の場合は `Program` が起動時に変数名入りのエラーで即失敗する。ドライラン時はX API系の変数を読み込まないため `MLB_API_KEY` だけで動く。
 
 ## ドメイン知識
 
@@ -58,6 +61,6 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 リファクタリングや機能追加の際は、まず以下を参照すること:
 
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
-- [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（.NET 10移行 / OIDC化 / user-secrets 等）
+- [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（OIDC化 / 共通設定一元化 等）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
 - [docs/infrastructure.md](docs/infrastructure.md) … インフラのTerraform化方針（OIDC化・タイムアウト調整・アラームはTerraform化後に対応）

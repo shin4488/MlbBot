@@ -73,7 +73,7 @@ namespace TwitterMlbBot.Authorization
             return Guid.NewGuid().ToString("N");
         }
 
-        public string CombineQueryParams(Dictionary<string, string> parameters)
+        public string CombineQueryParams(Dictionary<string, string>? parameters)
         {
             if (parameters == null || !parameters.Any())
             {
