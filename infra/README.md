@@ -7,16 +7,17 @@ MLBボットのAWSリソースをTerraformで管理する。**関数コードの
 ```
 infra/
 ├── .terraform-version        … tfenv用のバージョン固定（global.jsonと同じ発想）
-├── modules/
-│   └── scheduled_lambda/     … 共通モジュール: 定期実行Lambda一式
-│                                （Lambda関数 + 実行ロール + ロググループ + EventBridgeスケジュール）
+├── modules/                  … 共通モジュール（リソース定義の本体）
+│   ├── scheduled_lambda/     … 定期実行Lambda一式（関数 + 実行ロール + ロググループ + EventBridge）
+│   ├── monitoring/           … Lambdaエラーの監視一式（SNSトピック + メール購読 + アラーム）
+│   └── iam/                  … デプロイ用OIDC（プロバイダー + ロール）+ Terraform実行用ロール
 └── environments/
-    └── prod/                 … 本番環境の実リソース定義（ここでterraformコマンドを実行する）
-        ├── main.tf                     … scheduled_lambdaモジュールに実際の値を渡す
-        ├── backend.tf                  … state管理の説明とS3移行手順（暫定ローカルstate）
+    └── prod/                 … 本番環境の実値定義（ここでterraformコマンドを実行する）
+        ├── main.tf / monitoring.tf / iam.tf … 各モジュールに実際の値を渡す
+        ├── backend.tf                  … state管理の説明（S3バックエンド）
         ├── backend.hcl.example         … S3バックエンド設定の雛形（実物はgitignore）
         ├── terraform.tfvars.example    … 環境固有値の雛形（実物はgitignore）
-        └── providers.tf / variables.tf / outputs.tf / versions.tf
+        └── providers.tf / variables.tf / versions.tf
 ```
 
 ## 管理しているリソース

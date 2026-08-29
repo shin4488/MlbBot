@@ -1,6 +1,3 @@
-# MLBボット本番環境のリソース定義
-# 共通処理は ../../modules/scheduled_lambda に切り出し、ここでは実際の値だけを与える
-
 module "twitter_mlb_bot" {
   source = "../../modules/scheduled_lambda"
 
