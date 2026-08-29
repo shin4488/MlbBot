@@ -29,13 +29,15 @@ flowchart TB
     subgraph mlb["取得・ドメインモデル（Mlb/）"]
         ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信"]
         MAC --> TS["TeamStanding（不変record）<br>All-Star判定などのルールを保持"]
-        DS["DivisionStanding<br>地区順位表。順位順であることを型で保証"] --> TS
+        DS["DivisionStanding<br>地区順位表。順位順（RankedTeam）を型で保証"] --> TS
     end
 
     subgraph composing["文面組み立て（Composing/）<br>ネットワーク・設定に依存しない純粋ロジック"]
         TC["TweetComposer<br>文面の見た目だけに責任を持つ"] --> HP["HashtagProvider<br>公式タグマップ"]
+        TC --> TCN["TweetContent（値オブジェクト）<br>280字上限の知識を持つ"]
     end
-    TC --> DS
+    R --> DS
+    DS --> TC
 
     subgraph twitter["送信（Twitter/）"]
         ITS -.実装.-> TAS["TwitterApiSender<br>X API v2 + OAuth1.0a署名"]

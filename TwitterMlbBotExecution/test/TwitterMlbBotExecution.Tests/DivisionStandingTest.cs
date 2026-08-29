@@ -37,7 +37,9 @@ public class DivisionStandingTest
         var divisions = DivisionStanding.FromStandings(standings);
 
         var division = Assert.Single(divisions);
-        Assert.Equal(new[] { "White Sox", "Astros", "Athletics" }, division.RankedTeams.Select(team => team.Name));
+        Assert.Equal(new[] { "White Sox", "Astros", "Athletics" }, division.RankedTeams.Select(ranked => ranked.Team.Name));
+        // 順位は1位から連番で振られること
+        Assert.Equal(new[] { 1, 2, 3 }, division.RankedTeams.Select(ranked => ranked.Rank));
     }
 
     [Fact]
@@ -51,7 +53,7 @@ public class DivisionStandingTest
 
         var divisions = DivisionStanding.FromStandings(standings);
 
-        Assert.Equal("White Sox", Assert.Single(divisions).RankedTeams[0].Name);
+        Assert.Equal("White Sox", Assert.Single(divisions).RankedTeams[0].Team.Name);
     }
 
     [Fact]
@@ -84,6 +86,6 @@ public class DivisionStandingTest
         var divisions = DivisionStanding.FromStandings(standings);
 
         var division = Assert.Single(divisions);
-        Assert.DoesNotContain(division.RankedTeams, team => team.IsAllStarPseudoTeam);
+        Assert.DoesNotContain(division.RankedTeams, ranked => ranked.Team.IsAllStarPseudoTeam);
     }
 }

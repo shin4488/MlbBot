@@ -39,10 +39,10 @@ public class BotRunnerTest
             this.sendResult = sendResult ?? (_ => true);
         }
 
-        public Task<bool> SendAsync(string tweetContent)
+        public Task<bool> SendAsync(TweetContent tweetContent)
         {
-            SentContents.Add(tweetContent);
-            return Task.FromResult(this.sendResult(tweetContent));
+            SentContents.Add(tweetContent.Text);
+            return Task.FromResult(this.sendResult(tweetContent.Text));
         }
     }
 

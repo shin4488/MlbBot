@@ -1,3 +1,4 @@
+using TwitterMlbBot.Composing;
 using TwitterMlbBot.Twitter;
 using Xunit;
 
@@ -17,7 +18,7 @@ public class DryRunTweetSenderTest
         bool result;
         try
         {
-            result = await new DryRunTweetSender().SendAsync("テスト文面です");
+            result = await new DryRunTweetSender().SendAsync(new TweetContent("テスト文面です"));
         }
         finally
         {

@@ -9,17 +9,12 @@ namespace TwitterMlbBotExecution.Tests;
 ///
 /// テストは仕様ベースで書く方針:
 /// 文面のフォーマット（区切り文字・絵文字・並び等）は変更されうるため、
-/// 「順位は勝率で決まる」「All-Star擬似チームは除外」「タグは上位2チーム分」といった
-/// 仕様レベルの不変条件のみを検証する。ハッシュタグの検証には公式タグマップに
-/// 載っていないチーム名を使い、シーズンごとのマップ変更に依存させない。
+/// 「順位順に列挙される」「タグは上位2チーム分」といった仕様レベルの不変条件のみを検証する。
+/// ハッシュタグの検証には公式タグマップに載っていないチーム名を使い、
+/// シーズンごとのマップ変更に依存させない。
 /// </summary>
 public class TweetComposerTest
 {
-    private static TweetComposer CreateComposer()
-    {
-        return new TweetComposer(new HashtagProvider());
-    }
-
     private static TeamStanding CreateTeam(
         string league, string division, string name, int wins, int losses, double percentage)
     {
@@ -35,6 +30,11 @@ public class TweetComposerTest
         };
     }
 
+    private static IReadOnlyList<TweetContent> Compose(List<TeamStanding> standings)
+    {
+        return new TweetComposer(new HashtagProvider()).Compose(DivisionStanding.FromStandings(standings));
+    }
+
     [Fact]
     public void Compose_勝率の高い順に列挙される()
     {
@@ -46,11 +46,11 @@ public class TweetComposerTest
             CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
         };
 
-        var tweets = CreateComposer().Compose(standings);
+        var tweets = Compose(standings);
 
-        string tweet = Assert.Single(tweets);
-        Assert.True(tweet.IndexOf("White Sox") < tweet.IndexOf("Astros"), "勝率1位のチームが先に出力されること");
-        Assert.True(tweet.IndexOf("Astros") < tweet.IndexOf("Athletics"), "勝率2位のチームが3位より先に出力されること");
+        string text = Assert.Single(tweets).Text;
+        Assert.True(text.IndexOf("White Sox") < text.IndexOf("Astros"), "勝率1位のチームが先に出力されること");
+        Assert.True(text.IndexOf("Astros") < text.IndexOf("Athletics"), "勝率2位のチームが3位より先に出力されること");
     }
 
     [Fact]
@@ -64,36 +64,18 @@ public class TweetComposerTest
             CreateTeam("NL", "West", "Rockies", 60, 70, 0.460),
         };
 
-        var tweets = CreateComposer().Compose(standings);
+        var tweets = Compose(standings);
 
         Assert.Equal(2, tweets.Count);
         // 各地区の文面には自地区のチームのみ含まれること
-        string alTweet = Assert.Single(tweets, tweet => tweet.Contains("White Sox"));
-        Assert.DoesNotContain("Dodgers", alTweet);
+        var alTweet = Assert.Single(tweets, tweet => tweet.Text.Contains("White Sox"));
+        Assert.DoesNotContain("Dodgers", alTweet.Text);
     }
 
     [Fact]
-    public void Compose_AllStar擬似チームのグループは除外される()
+    public void Compose_順位表が空なら空リストを返す()
     {
-        var standings = new List<TeamStanding>
-        {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
-            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500),
-            // All-Star用の擬似チーム: リーグ名と地区名が同一
-            CreateTeam("AL", "AL", "AL All-Stars", 0, 0, 0),
-            CreateTeam("NL", "NL", "NL All-Stars", 0, 0, 0),
-        };
-
-        var tweets = CreateComposer().Compose(standings);
-
-        string tweet = Assert.Single(tweets);
-        Assert.DoesNotContain("All-Stars", tweet);
-    }
-
-    [Fact]
-    public void Compose_順位データが空なら空リストを返す()
-    {
-        Assert.Empty(CreateComposer().Compose(new List<TeamStanding>()));
+        Assert.Empty(Compose(new List<TeamStanding>()));
     }
 
     [Fact]
@@ -106,15 +88,15 @@ public class TweetComposerTest
             CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
         };
 
-        var tweets = CreateComposer().Compose(standings);
+        var tweets = Compose(standings);
 
-        string tweet = Assert.Single(tweets);
-        Assert.Contains("#MLB", tweet);
+        string text = Assert.Single(tweets).Text;
+        Assert.Contains("#MLB", text);
         // チーム名のスペースは除去されてタグになる
-        Assert.Contains("#WhiteSox", tweet);
-        Assert.Contains("#Astros", tweet);
+        Assert.Contains("#WhiteSox", text);
+        Assert.Contains("#Astros", text);
         // タグ付けは上位2チームまで
-        Assert.DoesNotContain("#Athletics", tweet);
+        Assert.DoesNotContain("#Athletics", text);
     }
 
     [Fact]
@@ -132,9 +114,9 @@ public class TweetComposerTest
             CreateTeam("NL", "West", "Twins", 96, 66, 0.593),
         }.Select(team => team with { GamesBehind = 10.5f }).ToList();
 
-        var tweets = new TweetComposer(new HashtagProvider()).Compose(standings);
+        var tweets = Compose(standings);
 
-        string tweet = Assert.Single(tweets);
-        Assert.True(tweet.Length <= 280, $"文面が280字を超えている: {tweet.Length}字");
+        var tweet = Assert.Single(tweets);
+        Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
     }
 }
