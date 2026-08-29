@@ -55,6 +55,8 @@ public interface ITwitterClient
 }
 ```
 
+（ドライランは現在 `TwitterService` 内の `dryRun` フラグ分岐で実装している。`ITwitterClient` 導入時は、コンソール出力するだけの `DryRunTwitterClient` 実装への差し替えに置き換え、フラグ分岐を廃止する）
+
 3. 文面組み立てを純粋クラスに抽出する（`TwitterService.CreateTweet` の前半部分と `Program.MapToTwitterParam` を統合）。
 
 ```csharp
@@ -172,27 +174,30 @@ services.Configure<TwitterOptions>(config.GetSection("Twitter"));
 （項目1の `TweetComposer` 抽出とセット）
 
 ### 現状の問題
-- `TwitterService.CreateTweet` がStringBuilderでの文面組み立てとHTTP送信を両方行うため、「文面が期待通りか」を確認する手段が実際にツイートすることしかない
-- `TwitterMlbBotExecution.Tests/FunctionTest.cs` は本番の `Program.Main` をそのまま呼ぶため、認証情報があると**テスト実行で実ツイートが飛ぶ**。テストとして危険なので削除対象
+- `TwitterService.CreateTweet` がStringBuilderでの文面組み立てとHTTP送信を両方行っており、文面ロジックを純粋関数として直接テストできない（既存の `TwitterServiceDryRunTest` はドライラン出力を経由した間接的な検証）
+- ハッシュタグ生成（`Program.GetTeamHashtags`）・マッピング（`Program.MapToTwitterParam`）・OAuth署名は未カバー
+- テストが `InternalsVisibleTo` でinternalクラスに触る前提になっており、テスト対象の公開APIとして設計されていない
+- `FunctionTest.cs` は本番の `Program.Main` をそのまま呼ぶためSkip指定の手動疎通専用になっており、自動テストとして機能していない
 
 ### 提案
-1. `TwitterMlbBot.Tests`（xUnit）プロジェクトを新設し、ソリューションに追加する。
+1. `TwitterMlbBot.Tests`（xUnit）プロジェクトを新設するか、既存の `TwitterMlbBotExecution.Tests` を拡張する。
 2. 以下の純粋ロジックにテストを書く。
    - `HashtagProvider`: 公式タグありチーム（`"Red Sox"` → `"#DirtyWater #RedSox"`）、公式タグなしチーム（`"Cubs"` → `"#Cubs"`）、スペース除去
    - `TweetComposer`: 順位の連番付与、All-Star擬似チーム（1チームだけのグループ）の除外、地区ごとの分割数、280字以内であること
    - `OAuth1.CombineQueryParams`: 空辞書、複数パラメータの連結順
-3. 既存の `FunctionTest.cs` は削除するか、`BotRunner` にモックを注入する形に書き換える。
+3. `FunctionTest.cs` は `BotRunner` にモックを注入する形に書き換え、Skipなしで常時実行できるようにする。
 
 ### 完了条件
-- `dotnet test` がネットワーク接続なしで完走する
+- 文面組み立て・ハッシュタグ・OAuth署名の純粋ロジックがネットワーク接続なしのテストで担保されている
+- Skip指定のテストが残っていない
 
 ---
 
 ## 4. エラー処理の是正
 
 ### 現状の問題
-- [MlbService.cs:37](TwitterMlbBot/Mlb/MlbService.cs): `throw new Exception()` — メッセージもステータスコードもなく、CloudWatchで原因が追えない
-- [TwitterService.cs:100-104](TwitterMlbBot/Twitter/TwitterService.cs): ツイート失敗時にログ出力だけして正常終了する。Lambdaとしては成功扱いになり、**ツイートが飛んでいないことに気づけない**
+- `MlbService.GetStandingData` の `throw new Exception()` — メッセージもステータスコードもなく、CloudWatchで原因が追えない
+- `TwitterService.ExecuteTweet`: ツイート失敗時にログ出力だけして正常終了する。Lambdaとしては成功扱いになり、**ツイートが飛んでいないことに気づけない**
 - 503対策の `Task.Delay(1000)` は固定値で、失敗時のリトライがない
 
 ### 提案
@@ -228,7 +233,7 @@ if (failures.Count > 0) throw new AggregateException(failures);
 ## 5. ロギングの整備
 
 ### 現状の問題
-- [MlbService.cs:41](TwitterMlbBot/Mlb/MlbService.cs) で全レスポンスJSON（30チーム分）を `Console.WriteLine` している。デバッグ痕跡でありログノイズ
+- `MlbService.GetStandingData` が全レスポンスJSON（30チーム分）を `Console.WriteLine` している。デバッグ痕跡でありログノイズ
 - ログレベルの概念がなく、成功/失敗の区別がログから読み取りにくい
 
 ### 提案
@@ -246,8 +251,7 @@ logger.LogError("Tweet failed: {StatusCode} {Body}", response.StatusCode, body);
 ## 6. 時刻・タイムゾーンの明示化
 
 ### 現状の問題
-- Lambda実行環境のローカル時刻はUTC。[Program.cs:57](TwitterMlbBot/Program.cs) の `DateTime.Now.Year` と [TwitterService.cs:38](TwitterMlbBot/Twitter/TwitterService.cs) の `DateTime.Now.ToShortDateString()` はUTC基準になり、日本時間の朝に動かすと**日付が1日ずれる**（例: JST 7/7 8:00実行 → UTC 7/6 23:00 → 「7/6」とツイートされる）
-- `ToShortDateString()` はカルチャ依存で、環境によって `07/06/2026` にも `2026/07/06` にもなる
+- Lambda実行環境のローカル時刻はUTC。`Program.Main` の `DateTime.Now.Year`（順位データの対象年の決定）はUTC基準になる。現在の実行時刻（06:00 UTC = 15:00 JST）では日本と日付がずれないため実害はないが、実行スケジュールをJST早朝側に変えると年末年始付近で対象年がずれる、暗黙の前提になっている
 
 ### 提案
 1. 基準タイムゾーンを決めて（ボットの読者基準ならJST）明示的に変換する。
@@ -257,7 +261,7 @@ private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById("
 DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Jst));
 ```
 
-2. フォーマットも固定する: `today.ToString("yyyy/MM/dd")`。
+2. ツイート文面に日付を載せる場合（[docs/tweet-content-ideas.md](tweet-content-ideas.md) 項目2）も、この明示変換とカルチャ非依存の固定書式（`"yyyy/MM/dd"` 等）を使う。
 3. テスト容易性のため、現在時刻は `TweetComposer` の引数として渡す（クラス内部で `DateTime.Now` を呼ばない）。.NET 8以降に上げたら（[docs/dependency-upgrades.md](dependency-upgrades.md) 参照）`TimeProvider` の注入が定石。
 
 ---
@@ -288,7 +292,7 @@ DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.
 ## 8. データ整形ロジックの暗黙の前提の排除
 
 ### 現状の問題
-- [Program.cs:100-106](TwitterMlbBot/Program.cs) の `++ranking` は「APIが地区内順位順で返す」ことに依存している。API仕様変更で黙って順位が壊れる
+- `Program.MapToTwitterParam` の `++ranking` は「APIが地区内順位順で返す」ことに依存している。API仕様変更で黙って順位が壊れる
 - All-Starチーム除外の `Where(g => g.Skip(1).Any())` は意図がコメント頼み
 
 ### 提案
@@ -321,7 +325,7 @@ private static bool IsRealDivision(IGrouping<..> g) => g.Key.League != g.Key.Div
 
 ## 10. その他の小さな改善
 
-- **URLの組み立て**: [MlbService.cs:29](TwitterMlbBot/Mlb/MlbService.cs) の文字列連結 `endpoint + param.Year + "?key=" + this.apiKey` はAPIキーがログに漏れやすい。`UriBuilder` を使い、ログにはURI全体を出さない
+- **URLの組み立て**: `MlbService.GetStandingData` の文字列連結 `endpoint + param.Year + "?key=" + this.apiKey` はAPIキーがログに漏れやすい。`UriBuilder` を使い、ログにはURI全体を出さない
 - **`HttpClient` のタイムアウト**: デフォルト100秒はLambdaタイムアウト（15秒）より長い。`client.Timeout = TimeSpan.FromSeconds(10)` のように明示する
 - **`OAuth1.CreateNonce`**: `DateTime.Now.Ticks` ベースは同一ミリ秒での衝突理論上あり。`Guid.NewGuid().ToString("N")` で十分かつ簡潔
 - **`OAuth1.CombineQueryParams`**: OAuth1.0a仕様上パラメータは辞書順ソートが必要。現状 `Dictionary` の列挙順がたまたま辞書順なので動いているが、`.OrderBy(p => p.Key, StringComparer.Ordinal)` を明示する

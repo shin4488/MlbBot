@@ -46,7 +46,7 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 ## ドメイン知識
 
-- **X APIは従量課金**（2026-02〜、投稿 $0.015/件・リンク入りは $0.20/件）。コスト節約のため日付のみのツイートは廃止済み。現在は6ツイート/日、3〜10月稼働で年間約$22
+- **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6ツイート/日・3〜10月稼働で年間約$22。ツイート件数を増やす変更はコスト増を意識すること
 - sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、グループ化後に要素数1のグループを除外している（`Program.MapToTwitterParam`）
 - チーム公式ハッシュタグは `Program.OfficialHashtagMap` で一元管理（毎シーズン変わる可能性あり）
 - X APIの連続POSTは503になるため、ツイート間に1秒のインターバルを入れている（Lambdaタイムアウト15秒との兼ね合いで調整済み）
@@ -57,6 +57,6 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 リファクタリングや機能追加の際は、まず以下を参照すること:
 
 - [docs/code-improvements.md](docs/code-improvements.md) … 保守性・責務分離・DI導入の計画
-- [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（CI・デプロイ是正・ドライラン・テスト整備は対応済み。未対応: .NET 10移行 / OIDC / user-secrets）
+- [docs/developer-experience.md](docs/developer-experience.md) … CI/CD・ツール整備の計画（.NET 10移行 / OIDC化 / user-secrets 等）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [docs/dependency-upgrades.md](docs/dependency-upgrades.md) … .NET 10移行・パッケージ更新の計画（期限: Lambda dotnet6は2027-02-01に更新ブロック。次に着手すべき大物。ローカルに.NET 10 SDKのインストールが必要）
+- [docs/dependency-upgrades.md](docs/dependency-upgrades.md) … .NET 10移行・パッケージ更新の計画（期限: Lambda dotnet6は2027-02-01に更新ブロック。ローカルに.NET 10 SDKのインストールが必要）

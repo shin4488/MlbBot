@@ -16,21 +16,17 @@
 | xunit | 2.4.2 | 2.9.3 | マイナー | 小 |
 | xunit.runner.visualstudio | 2.4.5 | 3.1.5 | メジャー | 小 |
 | Amazon.Lambda.TestUtilities | 2.0.0 | 4.1.0 | メジャー | 小 |
-| actions/checkout | v3 | v7 | メジャー | 小 |
-| actions/setup-dotnet | v3 | v5 | メジャー | 小 |
-| aws-actions/configure-aws-credentials | v2 | v6 | メジャー | 中 |
 | dotnet-lambda-test-tool-6.0 | 6.0用 | Amazon.Lambda.TestTool 1.0.0 | ツール | 小 |
 
 ## 全体の進め方（PR分割）
 
 | # | PR | 含める作業 | 備考 |
 |---|---|---|---|
-| PR1 | GitHub Actionsの更新 | 本ドキュメント項目5 | 他と独立。最初にやる |
-| PR2 | .NET 10化一式 | 項目1〜4すべて（csproj 3つ + workflow + launch.json + tools-defaults + テスト修正） | **分割しない**こと。TFMとLambdaパッケージは片方だけだとビルドが通らない |
-| 手動作業 | Lambdaランタイム変更 | 項目1の手順4 | **PR2マージの直前**に実施（順序の理由は項目1参照） |
-| 任意 | global.json追加 / TestTool刷新 | 項目6・7 | いつでも可 |
+| PR | .NET 10化一式 | 項目1〜4すべて（csproj 3つ + workflow + launch.json + tools-defaults） | **分割しない**こと。TFMとLambdaパッケージは片方だけだとビルドが通らない |
+| 手動作業 | Lambdaランタイム変更 | 項目1の手順4 | **PRマージの直前**に実施（順序の理由は項目1参照） |
+| 任意 | global.json追加 / TestTool刷新 | 項目5・6 | いつでも可 |
 
-期限: dotnet6ランタイムは**2027-02-01に関数更新ブロック**（デプロイパイプラインが失敗するようになる）。余裕をもって2026年内にPR2まで完了させる。
+期限: dotnet6ランタイムは**2027-02-01に関数更新ブロック**（デプロイパイプラインが失敗するようになる）。余裕をもって2026年内に.NET 10化を完了させる。
 
 ---
 
@@ -100,8 +96,8 @@ dotnet --list-sdks    # 10.0.x が表示されること（既存の6.0.408と共
 書き換え後、ローカルで確認:
 
 ```bash
-dotnet build MlbBot.sln                 # 警告・エラーなしで通ること
-dotnet test MlbBot.sln --list-tests     # テストを実行せず「発見」だけ確認する（--list-tests必須。実行すると実ツイートの危険がある）
+dotnet build MlbBot.sln    # 警告・エラーなしで通ること
+dotnet test MlbBot.sln     # 単体テストが全件パスすること（実ツイートするFunctionTestはSkip指定のため安全）
 ```
 
 ### 手順3: 設定ファイル類の書き換え（3ファイル）
@@ -113,17 +109,14 @@ dotnet test MlbBot.sln --list-tests     # テストを実行せず「発見」�
 +  "function-runtime": "dotnet10",
 ```
 
-[.github/workflows/lambda_deploy.yml](../.github/workflows/lambda_deploy.yml):
+ワークフローの `dotnet-version`（[lambda_deploy.yml](../.github/workflows/lambda_deploy.yml) のverify/deployの2ジョブ + [ci.yml](../.github/workflows/ci.yml) の計3か所）:
 
 ```diff
-       - name: Setup dotnet
-         uses: actions/setup-dotnet@v5
-         with:
 -          dotnet-version: '6.0.x'
 +          dotnet-version: '10.0.x'
 ```
 
-`.vscode/launch.json`（2か所。Lambda Test Tool側は項目6参照）:
+`.vscode/launch.json` 内の `net6.0` を含むパスをすべて `net10.0` に置換（`program` 1か所 + `cwd` 2か所。Lambda Test Tool自体の後継は項目5参照）:
 
 ```diff
 -            "program": "${workspaceFolder}/TwitterMlbBot/bin/Debug/net6.0/TwitterMlbBot.dll",
@@ -133,7 +126,7 @@ dotnet test MlbBot.sln --list-tests     # テストを実行せず「発見」�
 +            "cwd": "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net10.0",
 ```
 
-### 手順4: Lambdaランタイムの切り替え（手動・PR2マージの直前に実施）
+### 手順4: Lambdaランタイムの切り替え（手動・PRマージの直前に実施）
 
 デプロイパイプラインは関数コードしか更新しないため、ランタイム設定はCLIで1回変更する:
 
@@ -143,7 +136,7 @@ aws lambda update-function-configuration --function-name <関数名> --runtime d
 aws lambda get-function-configuration --function-name <関数名> --query '[Runtime,LastUpdateStatus]'
 ```
 
-**順序が重要**: 「ランタイム変更 → PR2マージ（デプロイ）」の順で行う。
+**順序が重要**: 「ランタイム変更 → PRマージ（デプロイ）」の順で行う。
 
 - net6.0でビルドされた現行コードは、.NET 10ランタイム上でも後方互換で動作する → 先にランタイムを切り替えても壊れない
 - 逆に、先にnet10.0のコードをデプロイすると、dotnet6ランタイム上では起動できず、**次の定期実行が失敗する**
@@ -152,25 +145,12 @@ aws lambda get-function-configuration --function-name <関数名> --query '[Runt
 
 ```bash
 aws lambda update-function-configuration --function-name <関数名> --runtime dotnet6
-git revert <PR2のマージコミット> && git push   # revertのpushで旧コードが自動デプロイされる
+git revert <マージコミット> && git push   # revertのpushで旧コードが自動デプロイされる
 ```
 
-### 手順5: 日付表記のカルチャ依存を排除する（同PRで対応）
+### 手順5: デプロイ後の動作確認
 
-dotnet6ランタイムはAmazon Linux 2、dotnet10はAmazon Linux 2023ベースでICU（カルチャデータ）のバージョンが変わるため、`ToShortDateString()` の出力（= ツイート冒頭の日付表記）が変わる可能性がある。ランタイム移行に巻き込まれないよう、書式を固定する。
-
-[TwitterService.cs:38](../TwitterMlbBot/Twitter/TwitterService.cs) を書き換え:
-
-```diff
--            string todayDate = DateTime.Now.ToShortDateString();
-+            // Lambda(UTC)でも日本時間の日付になるよう明示変換し、カルチャ非依存の固定書式とする
-+            TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-+            string todayDate = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, jst).ToString("yyyy/MM/dd");
-```
-
-（これは既存バグ「Lambda上ではUTC基準で日付が1日ずれる」の修正も兼ねる。詳細は docs/code-improvements.md 項目6）
-
-### 手順6: デプロイ後の動作確認
+マージ前にローカルのドライラン（`DRY_RUN=true`。README参照）で文面出力まで確認しておく。デプロイ後は:
 
 1. GitHub Actionsのデプロイjobが成功していること
 2. 翌日の定期実行後、CloudWatch Logsで対象ロググループを確認:
@@ -178,9 +158,9 @@ dotnet6ランタイムはAmazon Linux 2、dotnet10はAmazon Linux 2023ベース�
    aws logs tail /aws/lambda/<関数名> --since 1d
    ```
    エラーが無いこと、`Init Duration`（コールドスタート）が極端に悪化していないことを見る
-3. 実際のXアカウントで、ツイートが投稿されており日付表記が `2026/07/08` 形式であることを確認
+3. 実際のXアカウントで、6地区分のツイートが投稿されていることを確認
 
-※ `aws lambda invoke` での即時確認は**実ツイートが飛ぶ**ため、翌日の定期実行を待つ確認方法を推奨。すぐ確認したい場合はLambda環境変数を一時的にテスト用Xアカウントの認証情報に差し替えてからinvokeする。
+※ `aws lambda invoke` での即時確認は**実ツイートが飛ぶ**ため、翌日の定期実行を待つ確認方法を推奨。すぐ確認したい場合は、Lambda環境変数に `DRY_RUN=true` を一時設定してからinvokeし、CloudWatch Logsで文面出力を確認する（**確認後は必ず環境変数を削除する**）。
 
 ---
 
@@ -202,10 +182,10 @@ dotnet6ランタイムはAmazon Linux 2、dotnet10はAmazon Linux 2023ベース�
 
 ### 恒久対応（推奨）: パッケージごと削除する
 
-使用箇所は [ProcessUtility.cs:57](../TwitterMlbBot/ProcessUtility.cs) の `ConfigurationManager.AppSettings[identifier]` の1行だけ。docs/code-improvements.md 項目2の手順（`Microsoft.Extensions.Configuration` + user-secrets への移行）を実施すると、この行が消え、以下が全て不要になる:
+使用箇所は `ProcessUtility.ReadAppConfig` 内の `ConfigurationManager.AppSettings[identifier]` の1行だけ。docs/code-improvements.md 項目2の手順（`Microsoft.Extensions.Configuration` + user-secrets への移行）を実施すると、この行が消え、以下が全て不要になる:
 
 1. `TwitterMlbBot.csproj` から `<PackageReference Include="System.Configuration.ConfigurationManager" ... />` を削除
-2. `TwitterMlbBot/App.config`（ローカルの実キー入り）と `Dummy.config` を削除
+2. ローカルの `TwitterMlbBot/App.config`（存在する場合）と `Dummy.config` を削除
 3. `.gitignore` から App.config の除外行を削除
 
 ### 暫定対応: バージョンだけ上げる
@@ -218,112 +198,29 @@ dotnet6ランタイムはAmazon Linux 2、dotnet10はAmazon Linux 2023ベース�
 
 ## 4. テスト関連パッケージ（項目1に含めて実施）
 
-具体的なバージョンdiffは項目1・手順2の通り。パッケージ更新に伴い**コード修正が1か所必要**。
-
-### FunctionTest.cs の `async void` を `async Task` に変える
-
-xunit 2.9系のアナライザは `async void` テストを xUnit1048 警告として検出する（将来のxunit v3では実行自体不可）。[FunctionTest.cs:9](../TwitterMlbBotExecution/test/TwitterMlbBotExecution.Tests/FunctionTest.cs) を修正:
-
-```diff
-     [Fact]
--    public async void TestToUpperFunction()
-+    public async Task TestToUpperFunction()
-```
-
-（`Task` はImplicitUsings有効のため追加のusing不要）
+具体的なバージョンdiffは項目1・手順2の通り。コード修正は不要。
 
 ### 更新後の確認
 
 ```bash
-dotnet test MlbBot.sln --list-tests
+dotnet test MlbBot.sln
 ```
 
-- 「TestToUpperFunction」が一覧に出ればランナーの世代交代（runner 3.1.5 + Test.Sdk 18.7.0）は成功
-- **`--list-tests` なしの `dotnet test` は実行しない**こと（このテストは本番の `Program.Main` を呼ぶため、認証情報がある環境では実ツイートが飛ぶ）
+- 単体テスト（`TwitterServiceDryRunTest` の3件）がパスし、`FunctionTest` がスキップ表示されれば、ランナーの世代交代（runner 3.1.5 + Test.Sdk 18.7.0）は成功
 - Microsoft.NET.Test.Sdk 15.5.0（2017年リリース）のまま.NET 10に上げた場合、テストが「0件発見」または起動エラーになる。この症状が出たらまずTest.Sdkのバージョンを疑う
 
-### xunit v3 への移行は今回見送り
+### xunit v3 への移行は見送り
 
-`xunit.v3` はパッケージ名・名前空間から変わる大きな移行で、形骸テスト1件の現状ではコストに見合わない。単体テストを拡充するタイミング（docs/code-improvements.md 項目3）で再検討する。
-
----
-
-## 5. GitHub Actions（PR1として最初に実施）
-
-### 作業内容
-
-[.github/workflows/lambda_deploy.yml](../.github/workflows/lambda_deploy.yml) を3か所書き換え、あわせて手動実行トリガーを足す:
-
-```diff
- name: Deploy to AWS Lambda
- on:
-   push:
-     branches:
-       - master
-     paths-ignore:
-       - '**/*.md'
-       - '.gitignore'
-       - '.github/**'
-       - '.vscode/**'
-+  workflow_dispatch:   # 動作確認用に手動実行を可能にする（下記の理由参照）
- jobs:
-   deploy:
-     runs-on: ubuntu-latest
-
-     steps:
-       - name: Checkout
--        uses: actions/checkout@v3
-+        uses: actions/checkout@v7
-
-       - name: Configure AWS credentials
--        uses: aws-actions/configure-aws-credentials@v2
-+        uses: aws-actions/configure-aws-credentials@v6
-
-       - name: Setup dotnet
--        uses: actions/setup-dotnet@v3
-+        uses: actions/setup-dotnet@v5
-```
-
-（`dotnet-version` は PR1 の時点では `'6.0.x'` のまま。`'10.0.x'` への変更はPR2で行う）
-
-### なぜ更新が必要か
-
-実行基盤のNode.jsが16→20→24へ更新されており、Node16は非推奨済み。v2/v3のまま放置するとワークフローが警告→将来的に失敗する。このリポジトリで使っている入力（`dotnet-version`, `aws-access-key-id` 等）は最新版でもそのまま有効なので、番号の書き換えだけで移行できる。
-
-### 動作確認の落とし穴と手順
-
-このワークフローは `paths-ignore` に `.github/**` が入っているため、**ワークフローファイルだけを変更したpushではデプロイが走らず、動作確認ができない**。上記diffで `workflow_dispatch` を足しているのはこのため。確認手順:
-
-1. PR1をマージ
-2. GitHubリポジトリの Actions タブ → 「Deploy to AWS Lambda」→ 「Run workflow」で手動実行
-3. 全stepが緑になること、特に `Configure AWS credentials`（v2→v6で4メジャー飛んでいる）と `Deploy` step の成功を確認
-4. 失敗した場合はエラーメッセージを確認。`configure-aws-credentials` v6 で認証エラーになる場合は `aws-region` が secrets に正しく入っているかを最初に疑う（v4以降リージョン未指定が即エラーになった）
-
-### 再発防止
-
-`.github/dependabot.yml` を新規作成し、Actionsの更新を自動PR化する:
-
-```yaml
-version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
-  - package-ecosystem: nuget
-    directory: /
-    schedule:
-      interval: monthly
-```
+`xunit.v3` はパッケージ名・名前空間から変わる大きな移行で、現状のテスト規模ではコストに見合わない。単体テストを拡充するタイミング（docs/code-improvements.md 項目3）で再検討する。
 
 ---
 
-## 6. Lambdaローカル実行ツールの刷新（任意）
+## 5. Lambdaローカル実行ツールの刷新（任意）
 
-`.vscode/launch.json` の2つ目の構成が参照する `dotnet-lambda-test-tool-6.0` は .NET 6 専用で終息路線。選択肢は2つ:
+`.vscode/launch.json` のLambda Test Tool系の構成（通常実行・ドライランの2つ）が参照する `dotnet-lambda-test-tool-6.0` は .NET 6 専用で終息路線。**.NET 10移行後はこの2構成が動かなくなる**ため、移行と前後してどちらかを選ぶ:
 
 **案A（推奨）: ツール自体を不要にする**
-このボットはLambda固有のイベントペイロードを使っていない（`object input` を無視して `Program.Main(null)` を呼ぶだけ）ため、Lambdaエミュレーションの意味がほぼない。docs/developer-experience.md 項目5のドライランモードを実装し、launch.jsonの2つ目の構成（`.NET Core Launch (console) Lambda Function`）は削除する。1つ目の構成に `"args": ["--dry-run"]` を足せばデバッグ実行も安全になる。
+このボットはLambda固有のイベントペイロードを使っていない（`object input` を無視して `Program.Main(null)` を呼ぶだけ）ため、Lambdaエミュレーションの意味がほぼない。`TwitterMlbBot` を `OutputType=Exe` に変更すれば、Test Toolなしで `dotnet run --project TwitterMlbBot -- --dry-run` により起動でき、launch構成も `TwitterMlbBot.dll` 直接起動に一本化できる。ただし現在のLibrary設定はLambda Test Toolでのローカル実行との両立のためなので、Exe化はTest Toolを廃止する判断とセットで行うこと。
 
 **案B: 後継ツールへ移行する**
 
@@ -337,7 +234,7 @@ dotnet lambda-test-tool --help                         # 起動コマンド・�
 
 ---
 
-## 7. SDKバージョンの固定（任意・PR2以降いつでも）
+## 6. SDKバージョンの固定（任意・いつでも）
 
 環境間（ローカル/CI）のSDKずれを防ぐため、リポジトリ直下に `global.json` を新規作成:
 
