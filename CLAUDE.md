@@ -51,9 +51,9 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 ## ドメイン知識
 
 - **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6ツイート/日・3〜10月稼働で年間約$22。ツイート件数を増やす変更はコスト増を意識すること
-- sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、グループ化後に要素数1のグループを除外している（`Program.MapToTwitterParam`）
-- チーム公式ハッシュタグは `Program.OfficialHashtagMap` で一元管理（毎シーズン変わる可能性あり）
-- X APIの連続POSTは503になるため、ツイート間に1秒のインターバルを入れている（Lambdaタイムアウト15秒との兼ね合いで調整済み）
+- sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`TeamStanding.IsAllStarPseudoTeam` で判定し `DivisionStanding.FromStandings` で除外している
+- チーム公式ハッシュタグは `HashtagProvider` で一元管理（毎シーズン変わる可能性あり）
+- X APIの連続POSTは503になるため、`TwitterApiSender` が送信後に1秒のインターバルを置いている（Lambdaタイムアウト15秒との兼ね合いで調整済み）
 - OAuth1.0a署名は自前実装（`Authorization/OAuth1.cs`）。タイムスタンプが未来だとX APIに弾かれるため UNIXタイムスタンプ切り捨てを使用
 
 ## 改善計画ドキュメント
