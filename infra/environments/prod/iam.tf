@@ -4,13 +4,47 @@ locals {
   terraform_role_name = "mlbbot-terraform-execution"
   # ロール自身に付与するポリシーが自分のARNを参照すると循環になるため、名前からARNを組み立てる
   terraform_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.terraform_role_name}"
+  terraform_user_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/${var.terraform_user_name}"
+}
+
+# Terraform実行ユーザーがIAM系リソースをplan/applyするためのブートストラップ権限
+# （管理者が付与したものをimportして管理下に置いている）。
+# ⚠️ 誤って削除するとTerraformからIAMを変更できなくなり、管理者による再付与が必要になる
+resource "aws_iam_user_policy" "terraform_iam_bootstrap" {
+  name = "TerraformIamBootstrap"
+  user = var.terraform_user_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "Roles"
+        Effect   = "Allow"
+        Action   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole"]
+        Resource = [module.twitter_mlb_bot.role_arn, module.deploy_role.role_arn, local.terraform_role_arn]
+      },
+      {
+        Sid      = "Oidc"
+        Effect   = "Allow"
+        Action   = ["iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider", "iam:GetOpenIDConnectProvider", "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider"]
+        Resource = module.deploy_role.oidc_provider_arn
+      },
+      {
+        Sid      = "SelfUserPolicy"
+        Effect   = "Allow"
+        Action   = ["iam:PutUserPolicy", "iam:GetUserPolicy", "iam:ListUserPolicies", "iam:DeleteUserPolicy"]
+        Resource = local.terraform_user_arn
+      }
+    ]
+  })
 }
 
 module "deploy_role" {
   source = "../../modules/github_oidc_role"
 
-  role_name         = "mlbbot-github-actions-deploy"
-  role_description  = "GitHub ActionsからのLambdaコードデプロイ専用ロール"
+  role_name = "mlbbot-github-actions-deploy"
+  # IAMロールのdescriptionはASCII/Latin-1のみ許可（日本語不可）
+  role_description  = "Deploy role for GitHub Actions to update the Lambda function code"
   github_repository = "shin4488/MlbBot"
   github_branch     = "master"
 
@@ -30,8 +64,9 @@ module "deploy_role" {
 module "terraform_role" {
   source = "../../modules/assumable_role"
 
-  role_name          = local.terraform_role_name
-  role_description   = "Terraform実行（plan/apply）専用ロール"
+  role_name = local.terraform_role_name
+  # IAMロールのdescriptionはASCII/Latin-1のみ許可（日本語不可）
+  role_description   = "Terraform execution role for plan/apply of this repository"
   trusted_user_names = [var.terraform_user_name]
 
   # Terraformが管理しているリソース群に必要な範囲へ絞った権限
