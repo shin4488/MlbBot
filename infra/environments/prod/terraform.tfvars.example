@@ -1,5 +1,8 @@
 # このファイルを terraform.tfvars にコピーして実際の値を記入する
-# （terraform.tfvarsはgitignore対象。環境固有の情報は公開リポジトリにコミットしない）
-# 下の値はダミー。書き換えずに実行すると無効なリージョンとしてエラーになる（書き換え忘れ防止）
+# （terraform.tfvarsはgitignore対象。環境固有・機密情報は公開リポジトリにコミットしない）
+# 下の値はすべてダミー。書き換えずに実行するとエラーになるか、意味のない設定になる（書き換え忘れ防止）
 
-aws_region = "your-aws-region"
+aws_region          = "your-aws-region"
+alert_email         = "your-email@example.com"
+state_bucket_name   = "your-terraform-state-bucket"
+terraform_user_name = "your-iam-user-name"
