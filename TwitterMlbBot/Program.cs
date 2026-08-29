@@ -51,11 +51,22 @@ namespace TwitterMlbBot
         /// <returns></returns>
         public static async Task Main(string[] args)
         {
+            string[] arguments = args ?? Array.Empty<string>();
+
+            // --dry-run指定（または環境変数DRY_RUN=true）の場合はツイートせず文面をコンソール出力するのみとする
+            // Lambda実行時はargsがnull・DRY_RUN未設定のため、通常どおりツイートされる
+            bool dryRun = arguments.Contains("--dry-run")
+                || string.Equals(Environment.GetEnvironmentVariable("DRY_RUN"), "true", StringComparison.OrdinalIgnoreCase);
+
             // コマンドライン引数で西暦年が入力されたらその年を使用、入力されなかったら現在の西暦年を使用
-            int year = args?.Length > 0 && int.TryParse(args[0], out int inputYear)
-                ? inputYear
-                : DateTime.Now.Year
-                ;
+            int year = arguments
+                .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
+                .FirstOrDefault(inputYear => inputYear > 0);
+            if (year == 0)
+            {
+                year = DateTime.Now.Year;
+            }
+
             Mlb.Param mlbParam = new Mlb.Param() { Year = year };
             MlbService mlb = new MlbService();
             Result mlbResult = await mlb.GetStandingData(mlbParam);
@@ -63,7 +74,7 @@ namespace TwitterMlbBot
             // Mlbクラスの戻り値用クラスからTwitterクラスの引数用クラスへMapping
             Twitter.Param twitterParam = MapToTwitterParam(mlbResult.ResultTeamList);
 
-            TwitterService twitter = new TwitterService();
+            TwitterService twitter = new TwitterService(dryRun);
             await twitter.CreateTweet(twitterParam);
         }
 

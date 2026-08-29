@@ -9,4 +9,9 @@
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="4.7.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- internalクラス（TwitterService等）をテストプロジェクトから参照できるようにする -->
+    <InternalsVisibleTo Include="TwitterMlbBotExecution.Tests" />
+  </ItemGroup>
+
 </Project>

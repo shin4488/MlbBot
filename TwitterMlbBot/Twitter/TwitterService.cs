@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
@@ -15,9 +15,18 @@ namespace TwitterMlbBot.Twitter
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
         private static readonly HttpClient client = new HttpClient();
         private readonly OAuth1 authorization;
+        // ドライラン時はツイートせず文面をコンソール出力するのみとする
+        private readonly bool dryRun;
 
-        public TwitterService()
+        public TwitterService(bool dryRun = false)
         {
+            this.dryRun = dryRun;
+            if (dryRun)
+            {
+                // 誤投稿を構造的に防ぐため、ドライラン時は認証情報の読み込み自体を行わない
+                return;
+            }
+
             Dictionary<string, string> apiKeyConfig = ProcessUtility.ReadAppConfig("twitter");
             string consumerKey = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerKey", "CONSUMER_KEY");
             string consumerSecret = ProcessUtility.GetEnvVarByKey(apiKeyConfig, "consumerSecret", "CONSUMER_SECRET");
@@ -71,6 +80,13 @@ namespace TwitterMlbBot.Twitter
 
             foreach (string tweetContent in targetTweetContentList)
             {
+                if (this.dryRun)
+                {
+                    Console.WriteLine($"----- dry-run: 以下はツイートされません（{tweetContent.Length}文字） -----");
+                    Console.WriteLine(tweetContent);
+                    continue;
+                }
+
                 await ExecuteTweet(tweetContent);
                 // X APIの503 エラー（短時間での連続POSTによる制限）を防ぐため、インターバルを設ける
                 // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
@@ -85,6 +101,12 @@ namespace TwitterMlbBot.Twitter
         /// <returns></returns>
         public async Task ExecuteTweet(string tweetMessage)
         {
+            if (this.dryRun)
+            {
+                // CreateTweet側で到達しない想定だが、誤投稿防止の保険として二重にガードする
+                throw new InvalidOperationException("ドライランモード中はツイートを実行できません。");
+            }
+
             // 各リクエストごとに新しいタイムスタンプとnonceを含んだOAuth署名を生成する
             string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
             string requestBody = JsonSerializer.Serialize(new { text = tweetMessage });

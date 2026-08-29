@@ -1,0 +1,18 @@
+# 最小構成のEditorConfig。
+# C#のコードスタイル・命名規則はRoslynアナライザー / dotnet format の既定値に任せ、
+# ここではエディタ間で差が出やすい基本項目のみ統一する。
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# Markdownでは行末スペース2つが改行の意味を持つため除外
+trim_trailing_whitespace = false
