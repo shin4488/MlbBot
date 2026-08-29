@@ -14,25 +14,12 @@
 1. 一時的エラーにリトライを入れる。手書きでもよいが `Polly` を使うと簡潔（`WaitAndRetryAsync(3回, 指数バックオフ)`）。
 2. リトライ分の実行時間を確保するため、Lambdaタイムアウト（現状15秒）を60秒程度へ引き上げる（[infra/](../infra/README.md) の `timeout` 変更。applyは人間が実行）。
 
-## 2. デプロイワークフローのOIDC認証への切り替え（優先度: 中）
+## 2. デプロイ用の旧アクセスキーの廃止（優先度: 中）
 
-OIDCプロバイダーとデプロイ用ロール（masterブランチ限定・`lambda:UpdateFunctionCode` のみ）はTerraform（[infra/](../infra/README.md)）で定義済み。残作業はワークフロー側の切り替え:
+デプロイはOIDC認証（GitHub OIDC + masterブランチ限定のIAMロール）に切り替え済みのため、長期アクセスキーは不要になっている。OIDCでのデプロイ成功を1回確認したうえで:
 
-1. GitHub Secretsに `AWS_DEPLOY_ROLE_ARN`（デプロイ用ロールのARN）を登録
-2. lambda_deploy.ymlを長期キー認証からOIDC認証へ変更:
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-steps:
-  - uses: aws-actions/configure-aws-credentials@<SHA固定> # 現行規約に合わせcommit hashで指定
-    with:
-      role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-      aws-region: ${{ secrets.AWS_REGION }}
-```
-
-3. 切り替え後、旧IAMユーザーのアクセスキーをGitHub Secretsから削除し、AWS側でも無効化・削除
+1. GitHub Secretsから `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` を削除
+2. AWS側（IAMユーザーのセキュリティ認証情報）で該当アクセスキーを無効化→削除
 
 ## 3. Directory.Build.props による共通設定の一元化（優先度: 低）
 
