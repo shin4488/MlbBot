@@ -1,48 +1,18 @@
 {
-    // IntelliSense を使用して利用可能な属性を学べます。
-    // 既存の属性の説明をホバーして表示します。
-    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": ".NET Core Launch (console) TwitterMlbBot",
+            // ツイートせずに文面をコンソール出力するだけのドライラン実行（文面確認用）
+            // 通常送信（実ツイート）はLambdaの定期実行経由のみとする
+            "name": "TwitterMlbBot (dry-run / ツイートしない)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build bot",
-            "program": "${workspaceFolder}/TwitterMlbBot/bin/Debug/net6.0/TwitterMlbBot.dll",
-            "args": [],
+            "program": "${workspaceFolder}/TwitterMlbBot/bin/Debug/net10.0/TwitterMlbBot.dll",
+            "args": ["--dry-run"],
             "cwd": "${workspaceFolder}/TwitterMlbBot",
             "stopAtEntry": false,
             "console": "internalConsole"
-        },
-        {
-            "name": ".NET Core Launch (console) Lambda Function",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build lambda",
-            "program": "${env:HOME}/.dotnet/tools/dotnet-lambda-test-tool-6.0",
-            "args": [],
-            "cwd": "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0",
-            "console": "internalConsole",
-            "stopAtEntry": false,
-            "internalConsoleOptions": "openOnSessionStart"
-        },
-        {
-            // ツイートせずに文面をコンソール出力するだけのドライラン実行（文面確認用）
-            "name": "Lambda Function (dry-run / ツイートしない)",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build lambda",
-            "program": "${env:HOME}/.dotnet/tools/dotnet-lambda-test-tool-6.0",
-            "args": [],
-            "cwd": "${workspaceFolder}/TwitterMlbBotExecution/src/TwitterMlbBotExecution/bin/Debug/net6.0",
-            "console": "internalConsole",
-            "stopAtEntry": false,
-            "internalConsoleOptions": "openOnSessionStart",
-            "env": {
-                "DRY_RUN": "true"
-            }
         }
-
     ]
 }

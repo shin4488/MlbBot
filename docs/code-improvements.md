@@ -186,6 +186,7 @@ services.Configure<TwitterOptions>(config.GetSection("Twitter"));
    - `TweetComposer`: 順位の連番付与、All-Star擬似チーム（1チームだけのグループ）の除外、地区ごとの分割数、280字以内であること
    - `OAuth1.CombineQueryParams`: 空辞書、複数パラメータの連結順
 3. `FunctionTest.cs` は `BotRunner` にモックを注入する形に書き換え、Skipなしで常時実行できるようにする。
+4. あわせて xunit v3 への移行（パッケージ名・名前空間が変わる大型移行）もこのタイミングで検討する。
 
 ### 完了条件
 - 文面組み立て・ハッシュタグ・OAuth署名の純粋ロジックがネットワーク接続なしのテストで担保されている
@@ -262,7 +263,7 @@ DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.
 ```
 
 2. ツイート文面に日付を載せる場合（[docs/tweet-content-ideas.md](tweet-content-ideas.md) 項目2）も、この明示変換とカルチャ非依存の固定書式（`"yyyy/MM/dd"` 等）を使う。
-3. テスト容易性のため、現在時刻は `TweetComposer` の引数として渡す（クラス内部で `DateTime.Now` を呼ばない）。.NET 8以降に上げたら（[docs/dependency-upgrades.md](dependency-upgrades.md) 参照）`TimeProvider` の注入が定石。
+3. テスト容易性のため、現在時刻は `TweetComposer` の引数として渡す（クラス内部で `DateTime.Now` を呼ばない）。`TimeProvider` の注入が定石。
 
 ---
 
