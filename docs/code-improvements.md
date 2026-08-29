@@ -25,7 +25,7 @@ TwitterMlbBot/
 - `Program.Main` が「引数解析・API呼び出し・データ変換・ハッシュタグ生成・ツイート」のオーケストレーションと実装詳細を両方持っている
 - サービスクラスが自分で設定を読む（`new MlbService()` の中で `ProcessUtility.ReadAppConfig` を呼ぶ）ため、テスト時に差し替え不可能
 - 文面組み立てロジック（純粋関数にできる部分）がAPI送信と癒着していて単体テストが書けない
-- エラー処理が不十分（`throw new Exception()`、ツイート失敗の握りつぶし）
+- 一時的エラー（429/503等）へのリトライがない
 
 ---
 
@@ -175,7 +175,7 @@ services.Configure<TwitterOptions>(config.GetSection("Twitter"));
 
 ### 現状の問題
 - `TwitterService.CreateTweet` がStringBuilderでの文面組み立てとHTTP送信を両方行っており、文面ロジックを純粋関数として直接テストできない（既存の `TwitterServiceDryRunTest` はドライラン出力を経由した間接的な検証）
-- ハッシュタグ生成（`Program.GetTeamHashtags`）・マッピング（`Program.MapToTwitterParam`）・OAuth署名は未カバー
+- 文面組み立て（`CreateTweet` 内のStringBuilder部分）と署名生成（`OAuth1.CreateSignature`）は直接テストできていない
 - テストが `InternalsVisibleTo` でinternalクラスに触る前提になっており、テスト対象の公開APIとして設計されていない
 - `FunctionTest.cs` は本番の `Program.Main` をそのまま呼ぶためSkip指定の手動疎通専用になっており、自動テストとして機能していない
 
@@ -186,7 +186,8 @@ services.Configure<TwitterOptions>(config.GetSection("Twitter"));
    - `TweetComposer`: 順位の連番付与、All-Star擬似チーム（1チームだけのグループ）の除外、地区ごとの分割数、280字以内であること
    - `OAuth1.CombineQueryParams`: 空辞書、複数パラメータの連結順
 3. `FunctionTest.cs` は `BotRunner` にモックを注入する形に書き換え、Skipなしで常時実行できるようにする。
-4. あわせて xunit v3 への移行（パッケージ名・名前空間が変わる大型移行）もこのタイミングで検討する。
+4. テスト容易性のため、現在時刻は `TweetComposer` の引数または `TimeProvider` の注入で渡す（クラス内部で `DateTime.Now` を呼ばない）。
+5. あわせて xunit v3 への移行（パッケージ名・名前空間が変わる大型移行）もこのタイミングで検討する。
 
 ### 完了条件
 - 文面組み立て・ハッシュタグ・OAuth署名の純粋ロジックがネットワーク接続なしのテストで担保されている
@@ -194,52 +195,27 @@ services.Configure<TwitterOptions>(config.GetSection("Twitter"));
 
 ---
 
-## 4. エラー処理の是正
+## 4. リトライの導入（Terraform化後に対応）
 
 ### 現状の問題
-- `MlbService.GetStandingData` の `throw new Exception()` — メッセージもステータスコードもなく、CloudWatchで原因が追えない
-- `TwitterService.ExecuteTweet`: ツイート失敗時にログ出力だけして正常終了する。Lambdaとしては成功扱いになり、**ツイートが飛んでいないことに気づけない**
-- 503対策の `Task.Delay(1000)` は固定値で、失敗時のリトライがない
+- X API・MLB APIの一時的エラー（429/503等）に対するリトライがなく、単発の失敗がそのままツイート欠落になる
+- ツイートの部分失敗はログ出力のみで検知手段がない（全件失敗の場合のみLambda実行がエラー終了する）
 
 ### 提案
-1. 専用例外を定義し、診断情報を持たせる。
+1. 一時的エラーにリトライを入れる。手書きでもよいが `Polly` を使うと簡潔（`WaitAndRetryAsync(3回, 指数バックオフ)`）。
+2. リトライ分の実行時間を確保するため、Lambdaタイムアウト（現状15秒）を60秒程度へ引き上げる。
 
-```csharp
-public class MlbApiException : Exception
-{
-    public MlbApiException(HttpStatusCode statusCode, string responseBody)
-        : base($"MLB API returned {(int)statusCode}: {responseBody}") { }
-}
-```
-
-2. ツイート失敗は原則throwする。複数地区のうち一部だけ失敗した場合に残りを送りたいなら、失敗を集約して最後にまとめてthrowする。
-
-```csharp
-var failures = new List<Exception>();
-foreach (var tweet in tweets)
-{
-    try { await PostTweetAsync(tweet); }
-    catch (Exception ex) { failures.Add(ex); }
-}
-if (failures.Count > 0) throw new AggregateException(failures);
-```
-
-3. 一時的エラー（429/503）にはリトライを入れる。手書きでもよいが `Polly` を使うと簡潔（`WaitAndRetryAsync(3回, 指数バックオフ)`）。Lambdaタイムアウト（現状15秒）との整合に注意し、タイムアウト自体も60秒程度に引き上げを検討する。
-
-### 完了条件
-- ツイートが1件も成功しなかった場合、Lambda実行がエラーとして終わる（CloudWatchアラームを張れる状態）
+**対応時期**: Lambdaタイムアウト変更というインフラ設定変更を伴うため、**Terraform化（[docs/infrastructure.md](infrastructure.md)）が完了してから**実施する。
 
 ---
 
 ## 5. ロギングの整備
 
 ### 現状の問題
-- `MlbService.GetStandingData` が全レスポンスJSON（30チーム分）を `Console.WriteLine` している。デバッグ痕跡でありログノイズ
-- ログレベルの概念がなく、成功/失敗の区別がログから読み取りにくい
+- `Console.WriteLine` 直書きでログレベルの概念がなく、ログの重要度をフィルタできない
 
 ### 提案
 1. `Microsoft.Extensions.Logging` を導入し、`ILogger<T>` をDIで注入する（項目1のDI基盤に乗せる）。Lambda環境ではConsoleロガーで十分（CloudWatchに流れる）。
-2. レスポンス全文ダンプは `LogDebug` に落とすか削除。通常運用で欲しいのは「取得チーム数」「ツイート件数」「失敗時のステータス+ボディ」程度。
 
 ```csharp
 logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", teams.Count, year);
@@ -249,25 +225,7 @@ logger.LogError("Tweet failed: {StatusCode} {Body}", response.StatusCode, body);
 
 ---
 
-## 6. 時刻・タイムゾーンの明示化
-
-### 現状の問題
-- Lambda実行環境のローカル時刻はUTC。`Program.Main` の `DateTime.Now.Year`（順位データの対象年の決定）はUTC基準になる。現在の実行時刻（06:00 UTC = 15:00 JST）では日本と日付がずれないため実害はないが、実行スケジュールをJST早朝側に変えると年末年始付近で対象年がずれる、暗黙の前提になっている
-
-### 提案
-1. 基準タイムゾーンを決めて（ボットの読者基準ならJST）明示的に変換する。
-
-```csharp
-private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Jst));
-```
-
-2. ツイート文面に日付を載せる場合（[docs/tweet-content-ideas.md](tweet-content-ideas.md) 項目2）も、この明示変換とカルチャ非依存の固定書式（`"yyyy/MM/dd"` 等）を使う。
-3. テスト容易性のため、現在時刻は `TweetComposer` の引数として渡す（クラス内部で `DateTime.Now` を呼ばない）。`TimeProvider` の注入が定石。
-
----
-
-## 7. DTOの命名と堅牢化
+## 6. DTOの命名と堅牢化
 
 ### 現状の問題
 - `Mlb.Param` と `Twitter.Param` が同名で、`Program.cs` では名前空間修飾（`Mlb.Param` / `Twitter.Param`）で区別している。`Result` / `DetailResult` / `ParamByKey` も役割が名前から読めない
@@ -290,31 +248,7 @@ DateOnly today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.
 
 ---
 
-## 8. データ整形ロジックの暗黙の前提の排除
-
-### 現状の問題
-- `Program.MapToTwitterParam` の `++ranking` は「APIが地区内順位順で返す」ことに依存している。API仕様変更で黙って順位が壊れる
-- All-Starチーム除外の `Where(g => g.Skip(1).Any())` は意図がコメント頼み
-
-### 提案
-1. 並び順を自分で保証する:
-
-```csharp
-var ordered = teams.OrderByDescending(t => t.Percentage).ThenByDescending(t => t.Wins);
-```
-
-2. All-Star除外を意図が名前でわかるメソッドに切り出す:
-
-```csharp
-// League名とDivision名が同一になる擬似チーム（All-Star戦用）を除外する
-private static bool IsRealDivision(IGrouping<..> g) => g.Key.League != g.Key.Division;
-```
-
-（現行の「要素数1のグループを除外」より、データの実態（League=AL/Division=AL形式）に即した条件のほうが頑健）
-
----
-
-## 9. ProcessUtility の解体
+## 7. ProcessUtility の解体
 
 `ProcessUtility` は「HTTP汎用ラッパー」と「設定読み取り」という無関係な2責務を持つ雑多クラスになっている。
 
@@ -324,20 +258,10 @@ private static bool IsRealDivision(IGrouping<..> g) => g.Key.League != g.Key.Div
 
 ---
 
-## 10. その他の小さな改善
-
-- **URLの組み立て**: `MlbService.GetStandingData` の文字列連結 `endpoint + param.Year + "?key=" + this.apiKey` はAPIキーがログに漏れやすい。`UriBuilder` を使い、ログにはURI全体を出さない
-- **`HttpClient` のタイムアウト**: デフォルト100秒はLambdaタイムアウト（15秒）より長い。`client.Timeout = TimeSpan.FromSeconds(10)` のように明示する
-- **`OAuth1.CreateNonce`**: `DateTime.Now.Ticks` ベースは同一ミリ秒での衝突理論上あり。`Guid.NewGuid().ToString("N")` で十分かつ簡潔
-- **`OAuth1.CombineQueryParams`**: OAuth1.0a仕様上パラメータは辞書順ソートが必要。現状 `Dictionary` の列挙順がたまたま辞書順なので動いているが、`.OrderBy(p => p.Key, StringComparer.Ordinal)` を明示する
-- **マジックナンバー**: `Task.Delay(1000)` は `private static readonly TimeSpan TweetInterval = TimeSpan.FromSeconds(1);` として意図を名前に持たせる
-
----
-
 ## 推奨着手順
 
 1. 項目3（テスト基盤 + 純粋ロジック抽出）… 以降のリファクタの安全網になる
 2. 項目1（DI・責務分離）
-3. 項目2（設定管理）+ 項目9（ProcessUtility解体）
-4. 項目4（エラー処理）+ 項目5（ロギング)
-5. 項目6〜8, 10（個別改善。順不同）
+3. 項目2（設定管理）+ 項目7（ProcessUtility解体）
+4. 項目5（ロギング）+ 項目6（DTO命名）
+5. 項目4（リトライ）… Terraform化（[docs/infrastructure.md](infrastructure.md)）完了後
