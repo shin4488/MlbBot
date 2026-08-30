@@ -26,7 +26,7 @@ infra/
 flowchart LR
     subgraph tf["Terraform管理"]
         EB["aws_cloudwatch_event_rule<br>CronTweetMlbStandings<br>cron(0 6 * * ? *)"] --> TG["aws_cloudwatch_event_target"]
-        TG --> L["aws_lambda_function<br>TwitterMlbBot<br>dotnet10 / 512MB / 15s"]
+        TG --> L["aws_lambda_function<br>TwitterMlbBot<br>dotnet10 / 512MB / 60s"]
         PM["aws_lambda_permission<br>EventBridge→Lambda起動許可"] -.-> L
         L --> ROLE["aws_iam_role SuLambdaRole<br>（ログ書き込みのみの最小権限）"]
         L -.-> LG["aws_cloudwatch_log_group<br>保持90日"]
@@ -72,5 +72,4 @@ terraform fmt -recursive && terraform validate   # コミット前
 
 ## 次の対応候補
 
-1. **Lambdaタイムアウト60秒への引き上げ**（リトライ導入とセット。[docs/improvements.md](../docs/improvements.md) 項目1）
-2. **APIキーをSSM Parameter Store（SecureString・無料）へ移行** … アプリが起動時に `ssm:GetParametersByPath` で読む方式にすると、Lambda環境変数とtfstateから機密が消え、キー更新もCLIで完結する（`environment` のignore_changesも不要になる）。実行ロールへの権限付与はTerraform、パラメータ登録はCLI、読み込みはアプリ側の対応
+1. **APIキーをSSM Parameter Store（SecureString・無料）へ移行** … アプリが起動時に `ssm:GetParametersByPath` で読む方式にすると、Lambda環境変数とtfstateから機密が消え、キー更新もCLIで完結する（`environment` のignore_changesも不要になる）。実行ロールへの権限付与はTerraform、パラメータ登録はCLI、読み込みはアプリ側の対応

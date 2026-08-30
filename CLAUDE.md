@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上で毎日06:00 UTC（15:00 JST、EventBridgeルール `CronTweetMlbStandings`）に実行され、地区ごとに計6ツイートする。
+MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上で毎日06:00 UTC（15:00 JST、EventBridgeルール `CronTweetMlbStandings`）に実行され、地区ごとに計6ツイートする（8月以降はリーグごとのワイルドカード順位2件を加えて計8ツイート）。
 
 ## アーキテクチャ
 
@@ -54,10 +54,10 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 ## ドメイン知識
 
-- **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6ツイート/日・3〜10月稼働で年間約$22。ツイート件数を増やす変更はコスト増を意識すること
+- **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6〜8ツイート/日・3〜10月稼働で年間約$25。ツイート件数を増やす変更はコスト増を意識すること
 - sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`TeamStanding.IsAllStarPseudoTeam` で判定し `DivisionStanding.FromStandings` で除外している
 - チーム公式ハッシュタグは `HashtagProvider` で一元管理（毎シーズン変わる可能性あり）
-- X APIの連続POSTは503になるため、`TwitterApiSender` が送信後に1秒のインターバルを置いている（Lambdaタイムアウト15秒との兼ね合いで調整済み）
+- X APIの連続POSTは503になるため、`TwitterApiSender` が送信後に1秒のインターバルを置いている
 - OAuth1.0a署名は自前実装（`Authorization/OAuth1.cs`）。タイムスタンプが未来だとX APIに弾かれるため UNIXタイムスタンプ切り捨てを使用
 
 ## 改善計画ドキュメント

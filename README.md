@@ -10,7 +10,7 @@ MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先
 flowchart LR
     EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
     L --> MLB["sportsdata.io<br>MLB順位データ取得"]
-    L --> X["X API v2<br>地区ごとに6ツイート投稿"]
+    L --> X["X API v2<br>地区6件＋WC2件（8月以降）を投稿"]
 ```
 
 ### 内部構造
