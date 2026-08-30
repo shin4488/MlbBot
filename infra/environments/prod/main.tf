@@ -4,7 +4,6 @@ module "twitter_mlb_bot" {
   function_name = "TwitterMlbBot"
   runtime       = "dotnet10"
   handler       = "TwitterMlbBotExecution::TwitterMlbBotExecution.Function::FunctionHandlerAsync"
-  architectures = ["x86_64"]
   memory_size   = 512
   # 8ツイート/日（送信間に1秒のインターバル）と、将来のリトライ導入に耐える実行時間を確保する
   timeout = 60
