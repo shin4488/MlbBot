@@ -14,14 +14,17 @@ namespace TwitterMlbBot.Mlb
             return gameDate > this.RegularSeasonEndDate;
         }
 
+        // MLBのレギュラーシーズンが行われうる期間（開幕は最も早くて3月、最終戦は最も遅くて10月）
+        private const int EarliestSeasonMonth = 3;
+        private const int LatestSeasonMonth = 10;
+
         /// <summary>
         /// 明らかにシーズン外の時期（11〜2月）か。
-        /// MLBのレギュラーシーズンは3〜10月の間でしか行われないため、
-        /// その年の日程が取得できなくてもこの期間は「シーズン中でない」と断定できる
+        /// その年の日程が取得できなくても、この期間は「シーズン中でない」と断定できる
         /// </summary>
         public static bool IsClearlyOffSeason(DateOnly date)
         {
-            return date.Month >= 11 || date.Month <= 2;
+            return date.Month < EarliestSeasonMonth || date.Month > LatestSeasonMonth;
         }
     }
 }

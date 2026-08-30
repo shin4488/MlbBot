@@ -208,17 +208,18 @@ public class BotRunnerTest
     [InlineData(12)]
     [InlineData(1)]
     [InlineData(2)]
-    public async Task RunAsync_明らかなシーズン外で日程取得に失敗したら例外を投げてツイートしない(int month)
+    public async Task RunAsync_明らかなシーズン外は日程取得に失敗しても静かに正常終了する(int month)
     {
-        // 明らかなシーズン外（11〜2月）は投稿の必要がないため異常終了させ、エラーアラームのメール通知につなげる仕様
+        // 明らかなシーズン外（11〜2月）はどのみち投稿対象がなく実害ゼロのため、例外・メール通知にはしない仕様
         var sender = new FakeTweetSender();
+        var standingsProvider = new FakeStandingsProvider(CreateTwoDivisionStandings());
         var failingProvider = new FakeSeasonCalendarProvider(
             () => throw new InvalidOperationException("シーズン日程の取得失敗"));
 
-        await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
-                .RunAsync(2026, new DateOnly(2026, month, 15)));
+        await CreateRunner(standingsProvider, sender, failingProvider)
+            .RunAsync(2026, new DateOnly(2026, month, 15));
 
         Assert.Empty(sender.SentContents);
+        Assert.Equal(0, standingsProvider.CallCount);
     }
 }
