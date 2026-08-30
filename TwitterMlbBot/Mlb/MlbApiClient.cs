@@ -10,7 +10,7 @@ namespace TwitterMlbBot.Mlb
     {
         private static readonly HttpClient client = new HttpClient()
         {
-            // Lambdaタイムアウト（15秒）より先に打ち切り、原因を特定しやすくする
+            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
             Timeout = TimeSpan.FromSeconds(10),
         };
         private static readonly string endpoint = "https://api.sportsdata.io/v3/mlb/scores/json/Standings/";

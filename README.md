@@ -10,7 +10,7 @@ MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先
 flowchart LR
     EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
     L --> MLB["sportsdata.io<br>MLB順位データ取得"]
-    L --> X["X API v2<br>地区ごとに6ツイート投稿"]
+    L --> X["X API v2<br>地区6件＋WC2件（8月以降）を投稿"]
 ```
 
 ### 内部構造
@@ -90,9 +90,9 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 
 ## デプロイに必要な設定
 
-GitHub Secrets（Actionsデプロイ用）:
+GitHub Secrets（Actionsデプロイ用。認証はOIDCで長期キーは使わない）:
 
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` … デプロイ用IAMユーザーの認証情報
+- `AWS_DEPLOY_ROLE_ARN` … OIDCでAssumeするデプロイ用IAMロールのARN
 - `AWS_REGION` … デプロイ先のAWSリージョン
 - `AWS_LAMBDA_FUNCTION_NAME` … デプロイ先Lambda関数名
 
@@ -100,6 +100,5 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 
 ## 改善計画ドキュメント
 
-- [docs/improvements.md](docs/improvements.md) … 改善候補（リトライ導入 / OIDC切替 / 共通設定一元化）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
 - [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク

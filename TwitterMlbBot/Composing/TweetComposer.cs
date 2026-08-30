@@ -5,11 +5,17 @@ using TwitterMlbBot.Mlb;
 namespace TwitterMlbBot.Composing
 {
     /// <summary>
-    /// 地区順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
-    /// 地区分け・順位付けはDivisionStandingが担い、このクラスは文面の見た目だけに責任を持つ
+    /// 順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
+    /// 地区分け・順位付けはDivisionStanding / WildCardStandingが担い、このクラスは文面の見た目だけに責任を持つ
     /// </summary>
     internal class TweetComposer
     {
+        /// <summary>
+        /// ワイルドカードツイートに表示するチーム数
+        /// （プレーオフ圏内3チーム + 追走2チーム。文字数と情報価値のバランスで決めた表示都合の値）
+        /// </summary>
+        private const int wildCardDisplayCount = WildCardStanding.PlayoffSpots + 2;
+
         private readonly HashtagProvider hashtagProvider;
 
         public TweetComposer(HashtagProvider hashtagProvider)
@@ -32,47 +38,96 @@ namespace TwitterMlbBot.Composing
         }
 
         /// <summary>
-        /// 1地区分のツイート文面を組み立てる
+        /// ワイルドカード順位表をツイート文面リストに変換する
         /// </summary>
+        public IReadOnlyList<TweetContent> ComposeWildCards(IReadOnlyList<WildCardStanding> wildCards, DateOnly date)
+        {
+            return wildCards
+                .Select(wildCard => ComposeWildCardTweet(wildCard, date))
+                .ToList();
+        }
+
         private TweetContent ComposeDivisionTweet(DivisionStanding division, DateOnly date)
         {
             var buffer = new StringBuilder();
+            AppendHeader(buffer, date, $"{division.League} {division.Division}");
+
+            foreach (RankedTeam rankedTeam in division.RankedTeams)
+            {
+                // 首位のゲーム差（常に0）は意味を持たないため表示しない
+                float? gamesBehindToShow = rankedTeam.Rank > 1 ? rankedTeam.Team.GamesBehind : null;
+                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
+            }
+
+            AppendHashtags(buffer, division.RankedTeams.Take(2).Select(ranked => ranked.Team));
+            return new TweetContent(buffer.ToString());
+        }
+
+        private TweetContent ComposeWildCardTweet(WildCardStanding wildCard, DateOnly date)
+        {
+            var buffer = new StringBuilder();
+            AppendHeader(buffer, date, $"{wildCard.League} Wild Card");
+
+            foreach (RankedWildCardTeam rankedTeam in wildCard.RankedTeams.Take(wildCardDisplayCount))
+            {
+                // プレーオフ圏と圏外の境界を区切り線で示し、「あと何ゲームで圏内か」を読み取りやすくする
+                if (rankedTeam.Rank == WildCardStanding.PlayoffSpots + 1)
+                {
+                    buffer.AppendLine("---");
+                }
+                // 圏内チームのゲーム差（ボーダーより上）は表示せず、圏外チームのみボーダーとの差を示す
+                float? gamesBehindToShow = rankedTeam.Rank > WildCardStanding.PlayoffSpots
+                    ? rankedTeam.GamesBehindPlayoffLine
+                    : null;
+                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
+            }
+
+            AppendHashtags(buffer, wildCard.RankedTeams.Take(2).Select(ranked => ranked.Team));
+            return new TweetContent(buffer.ToString());
+        }
+
+        private static void AppendHeader(StringBuilder buffer, DateOnly date, string title)
+        {
             // 凡例（W-L (GB)）をヘッダ行に同居させ、数字の意味を示しつつ行数を抑える。
             // 読者は英語圏想定のため文面は英語で統一
             buffer
                 .Append("📅 ")
                 .Append(date.ToString("M/d", CultureInfo.InvariantCulture))
                 .Append(" ⚾ ")
-                .Append(division.League)
-                .Append(' ')
-                .Append(division.Division)
+                .Append(title)
                 .AppendLine(" ⚾ W-L (GB)");
+        }
 
-            // Xはプロポーショナルフォント表示のため、空白での桁揃えは効かない。
-            // 「<順位>. <チーム名> <勝ち数>-<負け数> (<ゲーム差>)」の区切り文字形式とし、首位のゲーム差は表示しない
-            foreach (RankedTeam rankedTeam in division.RankedTeams)
+        /// <summary>
+        /// 「順位. チーム名 勝-負 (ゲーム差)」の1行を追加する。ゲーム差はnullなら表示しない。
+        /// Xはプロポーショナルフォント表示のため、空白での桁揃えはせず区切り文字形式とする
+        /// </summary>
+        private static void AppendTeamRow(StringBuilder buffer, int rank, TeamStanding team, float? gamesBehind)
+        {
+            buffer
+                .Append(rank.ToString(CultureInfo.InvariantCulture)).Append(". ")
+                .Append(team.Name)
+                .Append(' ')
+                .Append(team.Wins.ToString(CultureInfo.InvariantCulture))
+                .Append('-')
+                .Append(team.Losses.ToString(CultureInfo.InvariantCulture));
+            if (gamesBehind is float value)
             {
-                buffer
-                    .Append(rankedTeam.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ")
-                    .Append(rankedTeam.Team.Name)
-                    .Append(' ')
-                    .Append(rankedTeam.Team.Wins.ToString(CultureInfo.InvariantCulture))
-                    .Append('-')
-                    .Append(rankedTeam.Team.Losses.ToString(CultureInfo.InvariantCulture));
-                if (rankedTeam.Rank > 1 && rankedTeam.Team.GamesBehind is float gamesBehind)
-                {
-                    buffer.Append(" (").Append(gamesBehind.ToString("0.#", CultureInfo.InvariantCulture)).Append(')');
-                }
-                buffer.AppendLine();
+                buffer.Append(" (").Append(value.ToString("0.#", CultureInfo.InvariantCulture)).Append(')');
             }
+            buffer.AppendLine();
+        }
 
-            // 「#MLB #<1位チームタグ> #<2位チームタグ>」をタグ付けメッセージとする
+        /// <summary>
+        /// 「#MLB #<1位チームタグ> #<2位チームタグ>」のタグ行を追加する
+        /// </summary>
+        private void AppendHashtags(StringBuilder buffer, IEnumerable<TeamStanding> topTeams)
+        {
             buffer.Append("#MLB");
-            foreach (RankedTeam topTeam in division.RankedTeams.Take(2))
+            foreach (TeamStanding team in topTeams)
             {
-                buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(topTeam.Team.Name));
+                buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(team.Name));
             }
-            return new TweetContent(buffer.ToString());
         }
     }
 }

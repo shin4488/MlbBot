@@ -36,7 +36,15 @@ namespace TwitterMlbBot
         {
             List<TeamStanding> standings = await this.standingsProvider.GetStandingsAsync(year);
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
-            IReadOnlyList<TweetContent> tweetContentList = this.composer.Compose(divisions, date);
+            List<TweetContent> tweetContentList = new(this.composer.Compose(divisions, date));
+
+            // ワイルドカード順位はプレーオフ争いが本格化する8月以降のみツイートする
+            // （シーズン序盤は情報価値が薄く、X APIの従量課金も抑える）
+            if (date.Month >= 8)
+            {
+                tweetContentList.AddRange(
+                    this.composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), date));
+            }
 
             // 順位データが存在しない場合（シーズンオフ等）はツイートしない
             if (tweetContentList.Count == 0)

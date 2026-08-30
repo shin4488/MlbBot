@@ -14,11 +14,10 @@ namespace TwitterMlbBot.Twitter
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
         private static readonly HttpClient client = new HttpClient()
         {
-            // Lambdaタイムアウト（15秒）より先に打ち切り、原因を特定しやすくする
+            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
             Timeout = TimeSpan.FromSeconds(10),
         };
         // X APIの503エラー（短時間での連続POSTによる制限）を防ぐための送信後インターバル
-        // （Lambdaの15秒タイムアウトに引っかからないよう1秒とする）
         private static readonly TimeSpan postInterval = TimeSpan.FromSeconds(1);
         private readonly OAuth1 authorization;
         private readonly ILogger<TwitterApiSender> logger;

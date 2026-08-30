@@ -155,6 +155,60 @@ public class TweetComposerTest
     }
 
     [Fact]
+    public void ComposeWildCards_ヘッダと日付と凡例が入る()
+    {
+        string text = ComposeWildCard().Text;
+
+        Assert.Contains("Wild Card", text);
+        Assert.Contains("8/30", text);
+        Assert.Contains("W-L (GB)", text);
+    }
+
+    [Fact]
+    public void ComposeWildCards_プレーオフ圏内はゲーム差非表示_圏外は境界線の後に表示される()
+    {
+        string text = ComposeWildCard().Text;
+        string[] lines = text.Split('\n');
+
+        // 圏内1〜3位の行にはゲーム差の括弧が付かない
+        Assert.All(
+            lines.Where(line => line.StartsWith("1.") || line.StartsWith("2.") || line.StartsWith("3.")),
+            line => Assert.DoesNotContain("(", line));
+        // 圏内と圏外の間に境界線があり、圏外チームにはボーダーとのゲーム差が表示される
+        Assert.Contains("---", text);
+        Assert.Contains(lines, line => line.StartsWith("4.") && line.Contains("(1)"));
+    }
+
+    [Fact]
+    public void ComposeWildCards_表示は5チームまで()
+    {
+        string text = ComposeWildCard().Text;
+
+        Assert.Contains("5. ", text);
+        Assert.DoesNotContain("6. ", text);
+    }
+
+    /// <summary>
+    /// 1リーグ・首位1チーム＋ワイルドカード6チームのデータでWCツイートを1件生成する
+    /// （6番目のチームは表示上限の検証用）
+    /// </summary>
+    private static TweetContent ComposeWildCard()
+    {
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 95, 45, 0.679),
+            CreateTeam("AL", "Central", "Astros", 88, 52, 0.629),
+            CreateTeam("AL", "Central", "Dodgers", 87, 53, 0.621),
+            CreateTeam("AL", "Central", "Rockies", 86, 54, 0.614),
+            CreateTeam("AL", "Central", "Cubs", 85, 55, 0.607),
+            CreateTeam("AL", "Central", "Angels", 82, 58, 0.586),
+            CreateTeam("AL", "Central", "Athletics", 80, 60, 0.571),
+        };
+        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
+        return Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
+    }
+
+    [Fact]
     public void Compose_文面はXの文字数上限280字以内に収まる()
     {
         // 実在の公式タグマップを意図的に使う数少ないテスト:
