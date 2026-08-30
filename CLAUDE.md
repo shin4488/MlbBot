@@ -64,6 +64,5 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 リファクタリングや機能追加の際は、まず以下を参照すること:
 
-- [docs/improvements.md](docs/improvements.md) … 改善候補（リトライ導入 / OIDC切替 / 共通設定一元化）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク（OIDC化・タイムアウト調整・アラーム等）
+- [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク

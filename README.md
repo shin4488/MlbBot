@@ -90,9 +90,9 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 
 ## デプロイに必要な設定
 
-GitHub Secrets（Actionsデプロイ用）:
+GitHub Secrets（Actionsデプロイ用。認証はOIDCで長期キーは使わない）:
 
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` … デプロイ用IAMユーザーの認証情報
+- `AWS_DEPLOY_ROLE_ARN` … OIDCでAssumeするデプロイ用IAMロールのARN
 - `AWS_REGION` … デプロイ先のAWSリージョン
 - `AWS_LAMBDA_FUNCTION_NAME` … デプロイ先Lambda関数名
 
@@ -100,6 +100,5 @@ Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECR
 
 ## 改善計画ドキュメント
 
-- [docs/improvements.md](docs/improvements.md) … 改善候補（リトライ導入 / OIDC切替 / 共通設定一元化）
 - [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
 - [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク
