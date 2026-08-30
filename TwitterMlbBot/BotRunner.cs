@@ -39,8 +39,24 @@ namespace TwitterMlbBot
         {
             // レギュラーシーズン終了後は順位が動かないため、順位取得もツイートもせずに終了する
             // （凍結した順位の投稿と、X API・MLB APIの無駄な消費をオフシーズン中ずっと防ぐ）
-            SeasonCalendar season = await this.seasonCalendarProvider.GetSeasonCalendarAsync(year);
-            if (season.IsFinished(date))
+            SeasonCalendar? season;
+            try
+            {
+                season = await this.seasonCalendarProvider.GetSeasonCalendarAsync(year);
+            }
+            catch (Exception exception)
+            {
+                if (SeasonCalendar.IsClearlyOffSeason(date))
+                {
+                    // 明らかにシーズン外なら投稿すべきものもないため、異常終了してエラーアラームのメール通知につなげる
+                    throw;
+                }
+                // シーズン中でありうる期間は、日程が不明でもツイートを止めない
+                // （このエラーログはログ監視アラームが拾い、メール通知される）
+                this.logger.LogError(exception, "シーズン日程の取得に失敗しましたが、シーズン中の可能性があるため投稿を続行します");
+                season = null;
+            }
+            if (season != null && season.IsFinished(date))
             {
                 this.logger.LogInformation(
                     "レギュラーシーズン終了後のためツイートしません（終了日: {EndDate}）", season.RegularSeasonEndDate);

@@ -13,5 +13,15 @@ namespace TwitterMlbBot.Mlb
         {
             return gameDate > this.RegularSeasonEndDate;
         }
+
+        /// <summary>
+        /// 明らかにシーズン外の時期（11〜2月）か。
+        /// MLBのレギュラーシーズンは3〜10月の間でしか行われないため、
+        /// その年の日程が取得できなくてもこの期間は「シーズン中でない」と断定できる
+        /// </summary>
+        public static bool IsClearlyOffSeason(DateOnly date)
+        {
+            return date.Month >= 11 || date.Month <= 2;
+        }
     }
 }

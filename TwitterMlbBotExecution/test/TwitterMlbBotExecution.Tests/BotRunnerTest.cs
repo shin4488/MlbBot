@@ -186,16 +186,38 @@ public class BotRunnerTest
         Assert.NotEmpty(sender.SentContents);
     }
 
-    [Fact]
-    public async Task RunAsync_シーズン日程の取得に失敗したら例外を投げてツイートしない()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(7)]
+    [InlineData(10)]
+    public async Task RunAsync_シーズン中でありうる期間は日程取得に失敗してもツイートを続行する(int month)
     {
-        // 黙ってスキップ・黙って投稿のどちらもせず異常終了させ、エラーアラームのメール通知につなげる仕様
+        // statsapiの障害でツイートを止めない仕様（エラーログはログ監視アラームが拾いメール通知される）
+        var sender = new FakeTweetSender();
+        var failingProvider = new FakeSeasonCalendarProvider(
+            () => throw new InvalidOperationException("シーズン日程の取得失敗"));
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
+            .RunAsync(2026, new DateOnly(2026, month, 15));
+
+        Assert.NotEmpty(sender.SentContents);
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(12)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RunAsync_明らかなシーズン外で日程取得に失敗したら例外を投げてツイートしない(int month)
+    {
+        // 明らかなシーズン外（11〜2月）は投稿の必要がないため異常終了させ、エラーアラームのメール通知につなげる仕様
         var sender = new FakeTweetSender();
         var failingProvider = new FakeSeasonCalendarProvider(
             () => throw new InvalidOperationException("シーズン日程の取得失敗"));
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider).RunAsync(2026, julyDate));
+            () => CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
+                .RunAsync(2026, new DateOnly(2026, month, 15)));
 
         Assert.Empty(sender.SentContents);
     }
