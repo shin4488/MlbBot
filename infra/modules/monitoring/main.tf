@@ -31,3 +31,39 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
   alarm_actions = [aws_sns_topic.this.arn]
 }
+
+# 処理を続行しつつエラーログだけを出す障害は、Lambdaのエラーメトリクスに現れないため
+# ログからメトリクスを起こして通知する
+resource "aws_cloudwatch_log_metric_filter" "error_log" {
+  count = var.error_log_alarm == null ? 0 : 1
+
+  name           = var.error_log_alarm.metric_name
+  log_group_name = var.error_log_alarm.log_group_name
+  pattern        = var.error_log_alarm.filter_pattern
+
+  metric_transformation {
+    name      = var.error_log_alarm.metric_name
+    namespace = var.error_log_alarm.metric_namespace
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "error_log" {
+  count = var.error_log_alarm == null ? 0 : 1
+
+  alarm_name        = var.error_log_alarm.alarm_name
+  alarm_description = var.error_log_alarm.alarm_description
+
+  namespace   = var.error_log_alarm.metric_namespace
+  metric_name = var.error_log_alarm.metric_name
+
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  # 定期実行の合間はデータが無いのが常態のため、欠落はアラーム対象にしない
+  treat_missing_data = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.this.arn]
+}

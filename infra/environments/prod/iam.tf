@@ -94,7 +94,7 @@ module "terraform_role" {
       {
         Sid      = "Logs"
         Effect   = "Allow"
-        Action   = ["logs:Describe*", "logs:List*", "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
+        Action   = ["logs:Describe*", "logs:List*", "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:PutMetricFilter", "logs:DeleteMetricFilter", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}*"
       },
       {
@@ -112,6 +112,7 @@ module "terraform_role" {
         Resource = [
           "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.alert_topic_name}*",
           "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.alert_alarm_name}",
+          "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.error_log_alarm_name}",
         ]
       },
       {
