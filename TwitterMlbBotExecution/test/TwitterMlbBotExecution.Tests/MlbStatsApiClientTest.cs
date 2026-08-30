@@ -22,11 +22,13 @@ public class MlbStatsApiClientTest
         Assert.Equal(new DateOnly(2026, 9, 27), calendar.RegularSeasonEndDate);
     }
 
-    [Fact]
-    public void ParseSeasonCalendar_シーズン情報が空なら例外を投げる()
+    [Theory]
+    [InlineData("""{"seasons":[]}""")]
+    [InlineData("""{"seasons":[{"seasonId":"2026"}]}""")]
+    public void ParseSeasonCalendar_シーズン情報が欠けていたら例外を投げる(string responseBody)
     {
-        // 判定不能のまま投稿可否を決めない仕様（エラー通知につなげる）
+        // シーズンなし・終了日フィールド欠落のどちらでも、判定不能のまま投稿可否を決めない仕様
         Assert.ThrowsAny<Exception>(
-            () => MlbStatsApiClient.ParseSeasonCalendar("""{"seasons":[]}""", 2026));
+            () => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
     }
 }

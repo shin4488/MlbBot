@@ -37,13 +37,8 @@ namespace TwitterMlbBot
         /// <param name="date">ツイート文面に表示する日付</param>
         public async Task RunAsync(int year, DateOnly date)
         {
-            // レギュラーシーズン終了後は順位が動かないため、順位取得もツイートもせずに終了する
-            // （凍結した順位の投稿と、X API・MLB APIの無駄な消費をオフシーズン中ずっと防ぐ）
-            SeasonCalendar season = await this.seasonCalendarProvider.GetSeasonCalendarAsync(year);
-            if (season.IsFinished(date))
+            if (await this.ShouldSkipForOffSeasonAsync(year, date))
             {
-                this.logger.LogInformation(
-                    "レギュラーシーズン終了後のためツイートしません（終了日: {EndDate}）", season.RegularSeasonEndDate);
                 return;
             }
 
@@ -51,9 +46,7 @@ namespace TwitterMlbBot
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
             List<TweetContent> tweetContentList = new(this.composer.Compose(divisions, date));
 
-            // ワイルドカード順位はプレーオフ争いが本格化する8月以降のみツイートする
-            // （シーズン序盤は情報価値が薄く、X APIの従量課金も抑える）
-            if (date.Month >= 8)
+            if (WildCardStanding.IsPlayoffRacePeriod(date))
             {
                 tweetContentList.AddRange(
                     this.composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), date));
@@ -88,6 +81,41 @@ namespace TwitterMlbBot
                 // 一部失敗は重複コンテンツ拒否など正常系でも起きるため、全件失敗のみエラーにする
                 throw new AllTweetsFailedException(tweetContentList.Count);
             }
+        }
+
+        /// <summary>
+        /// シーズン状況からツイートを見送るべきかを判定する。
+        /// レギュラーシーズン終了後は順位が動かないため、凍結した順位の投稿と
+        /// X API・MLB APIの無駄な消費をオフシーズン中ずっと防ぐ
+        /// </summary>
+        private async Task<bool> ShouldSkipForOffSeasonAsync(int year, DateOnly date)
+        {
+            SeasonCalendar season;
+            try
+            {
+                season = await this.seasonCalendarProvider.GetSeasonCalendarAsync(year);
+            }
+            catch (Exception exception)
+            {
+                if (SeasonCalendar.IsClearlyOffSeason(date))
+                {
+                    // 明らかにシーズン外は日程が不明でも投稿対象がなく実害ゼロのため、メール通知にはせず静かに見送る
+                    this.logger.LogWarning(exception, "シーズン日程の取得に失敗しましたが、明らかにシーズン外のためツイートせず終了します");
+                    return true;
+                }
+                // シーズン中でありうる期間は、日程が不明でもツイートを止めない
+                // （このエラーログはログ監視アラームが拾い、メール通知される）
+                this.logger.LogError(exception, "シーズン日程の取得に失敗しましたが、シーズン中の可能性があるため投稿を続行します");
+                return false;
+            }
+
+            if (season.IsFinished(date))
+            {
+                this.logger.LogInformation(
+                    "レギュラーシーズン終了後のためツイートしません（終了日: {EndDate}）", season.RegularSeasonEndDate);
+                return true;
+            }
+            return false;
         }
     }
 }

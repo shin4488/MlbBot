@@ -186,17 +186,56 @@ public class BotRunnerTest
         Assert.NotEmpty(sender.SentContents);
     }
 
-    [Fact]
-    public async Task RunAsync_シーズン日程の取得に失敗したら例外を投げてツイートしない()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(7)]
+    [InlineData(10)]
+    public async Task RunAsync_シーズン中でありうる期間は日程取得に失敗してもツイートを続行する(int month)
     {
-        // 黙ってスキップ・黙って投稿のどちらもせず異常終了させ、エラーアラームのメール通知につなげる仕様
+        // statsapiの障害でツイートを止めない仕様（エラーログはログ監視アラームが拾いメール通知される）
         var sender = new FakeTweetSender();
         var failingProvider = new FakeSeasonCalendarProvider(
             () => throw new InvalidOperationException("シーズン日程の取得失敗"));
 
-        await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider).RunAsync(2026, julyDate));
+        await CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
+            .RunAsync(2026, new DateOnly(2026, month, 15));
+
+        Assert.NotEmpty(sender.SentContents);
+    }
+
+    [Fact]
+    public async Task RunAsync_文字数上限を超える可能性のある文面でも送信は試みる()
+    {
+        // Xの実際の判定は重み付きの独自カウントのため、近似カウントの超過では送信を止めない仕様（警告のみ）
+        var sender = new FakeTweetSender();
+        var standings = new List<TeamStanding>
+        {
+            new TeamStanding { League = "AL", Division = "Central", Name = new string('A', 300), Wins = 84, Losses = 56, Percentage = 0.600 },
+        };
+
+        await CreateRunner(standings, sender).RunAsync(2026, julyDate);
+
+        string sent = Assert.Single(sender.SentContents);
+        Assert.True(sent.Length > TweetContent.CharacterLimit, "上限超過の文面が題材になっていること");
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(12)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RunAsync_明らかなシーズン外は日程取得に失敗しても静かに正常終了する(int month)
+    {
+        // 明らかなシーズン外（11〜2月）はどのみち投稿対象がなく実害ゼロのため、例外・メール通知にはしない仕様
+        var sender = new FakeTweetSender();
+        var standingsProvider = new FakeStandingsProvider(CreateTwoDivisionStandings());
+        var failingProvider = new FakeSeasonCalendarProvider(
+            () => throw new InvalidOperationException("シーズン日程の取得失敗"));
+
+        await CreateRunner(standingsProvider, sender, failingProvider)
+            .RunAsync(2026, new DateOnly(2026, month, 15));
 
         Assert.Empty(sender.SentContents);
+        Assert.Equal(0, standingsProvider.CallCount);
     }
 }

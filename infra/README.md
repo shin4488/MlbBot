@@ -9,7 +9,7 @@ infra/
 ├── .terraform-version        … tfenv用のバージョン固定（global.jsonと同じ発想）
 ├── modules/                  … 共通モジュール（リソース定義の本体）
 │   ├── scheduled_lambda/     … 定期実行Lambda一式（関数 + 実行ロール + ロググループ + EventBridge）
-│   ├── monitoring/           … Lambdaエラーの監視一式（SNSトピック + メール購読 + アラーム）
+│   ├── monitoring/           … Lambdaエラーの監視一式（SNSトピック + メール購読 + アラーム + エラーログ監視）
 │   └── iam/                  … デプロイ用OIDC（プロバイダー + ロール）+ Terraform実行用ロール
 └── environments/
     └── prod/                 … 本番環境の実値定義（ここでterraformコマンドを実行する）
@@ -31,6 +31,7 @@ flowchart LR
         L --> ROLE["aws_iam_role SuLambdaRole<br>（ログ書き込みのみの最小権限）"]
         L -.-> LG["aws_cloudwatch_log_group<br>保持90日"]
         L -.->|Errorsメトリクス| ALM["aws_cloudwatch_metric_alarm<br>実行エラー（ツイート全滅等）"] --> SNS["aws_sns_topic<br>→ メール通知"]
+        L -.->|エラーログ| MF["aws_cloudwatch_log_metric_filter<br>+ alarm（投稿続行した障害の検知）"] --> SNS
         OIDC["OIDCプロバイダー +<br>デプロイ用ロール（コード更新のみ）"]
         TFR["Terraform実行用ロール<br>（AssumeRole方式）"]
     end
