@@ -9,6 +9,7 @@ MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先
 ```mermaid
 flowchart LR
     EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
+    L --> SA["statsapi.mlb.com<br>シーズン日程取得<br>（終了後は投稿せず終了）"]
     L --> MLB["sportsdata.io<br>MLB順位データ取得"]
     L --> X["X API v2<br>地区6件＋WC2件（8月以降）を投稿"]
 ```
@@ -20,13 +21,16 @@ flowchart LR
 ```mermaid
 flowchart TB
     F["TwitterMlbBotExecution.Function<br>Lambdaハンドラ（薄いラッパー）"] --> P
-    P["Program.Main<br>引数解析（RunOptions）と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>取得 → 組み立て → 送信 の流れだけを持つ"]
+    P["Program.Main<br>引数解析（RunOptions）と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>シーズン判定 → 取得 → 組み立て → 送信 の流れだけを持つ"]
 
+    R --> ISC([ISeasonCalendarProvider])
     R --> ISP([IStandingsProvider])
     R --> TC
     R --> ITS([ITweetSender])
 
     subgraph mlb["取得・ドメインモデル（Mlb/）"]
+        ISC -.実装.-> MSC["MlbStatsApiClient<br>statsapi.mlb.com（公式・認証不要）"]
+        MSC --> SC["SeasonCalendar（不変record）<br>シーズン終了判定のルールを保持"]
         ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信"]
         MAC --> TS["TeamStanding（不変record）<br>All-Star判定などのルールを保持"]
         DS["DivisionStanding<br>地区順位表。順位順（RankedTeam）を型で保証"] --> TS

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上で毎日06:00 UTC（15:00 JST、EventBridgeルール `CronTweetMlbStandings`）に実行され、地区ごとに計6ツイートする（8月以降はリーグごとのワイルドカード順位2件を加えて計8ツイート）。
+MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上で毎日06:00 UTC（15:00 JST、EventBridgeルール `CronTweetMlbStandings`）に実行され、地区ごとに計6ツイートする（8月以降はリーグごとのワイルドカード順位2件を加えて計8ツイート）。レギュラーシーズン終了日を過ぎると自動で投稿を止める（スケジュール自体は年中起動する）。
 
 ## アーキテクチャ
 
@@ -9,13 +9,14 @@ MLBの順位表を毎日X（Twitter）に投稿するボット。AWS Lambda上�
 ```mermaid
 flowchart LR
     EB["EventBridge<br>毎日06:00 UTC"] --> F["Function<br>（Lambdaハンドラ）"] --> P["Program.Main<br>引数解析・組み立て"] --> R["BotRunner<br>オーケストレーション"]
+    R --> SCP["ISeasonCalendarProvider<br>← MlbStatsApiClient<br>(statsapi.mlb.com・認証不要)"]
     R --> MAC["IStandingsProvider<br>← MlbApiClient<br>(sportsdata.io)"]
     R --> TC["TweetComposer + HashtagProvider<br>純粋ロジック（Composing/）"]
     R --> ITS["ITweetSender<br>← TwitterApiSender (X API)<br>← DryRunTweetSender (dry-run)"]
 ```
 
 - `TwitterMlbBot/` … 本体ロジック（OutputType=Exe。ローカル実行は `dotnet run --project TwitterMlbBot -- --dry-run`）
-  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record・All-Star判定）、`DivisionStanding`（順位順を `RankedTeam` として型で保証）、`TweetContent`（280字上限の知識を持つ値オブジェクト）、`RunOptions`（引数解析の純粋関数）
+  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record・All-Star判定）、`DivisionStanding`（順位順を `RankedTeam` として型で保証）、`TweetContent`（280字上限の知識を持つ値オブジェクト）、`SeasonCalendar`（シーズン終了判定）、`RunOptions`（引数解析の純粋関数）
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
 - `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、純粋ロジック・オーケストレーションの単体テスト（フェイク使用・ネットワーク不要）
 - `infra/` … Terraformによるインフラ管理（使い方・残タスクは [infra/README.md](infra/README.md)）
@@ -54,7 +55,8 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 ## ドメイン知識
 
-- **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6〜8ツイート/日・3〜10月稼働で年間約$25。ツイート件数を増やす変更はコスト増を意識すること
+- **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6〜8ツイート/日・シーズン中（3月末〜9月末）のみ投稿で年間約$19。ツイート件数を増やす変更はコスト増を意識すること
+- **レギュラーシーズンの日程はMLB公式Stats API**（statsapi.mlb.com・認証不要・無料）から取得し、終了日の翌日以降は順位取得もツイートもせず終了する。日程の取得に失敗した場合は例外で異常終了させ、エラーアラームのメール通知につなげる（黙ってスキップも黙って投稿もしない）。シーズン開始前はsportsdata.ioが空の順位を返すため自然に何も投稿されない
 - sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`TeamStanding.IsAllStarPseudoTeam` で判定し `DivisionStanding.FromStandings` で除外している
 - チーム公式ハッシュタグは `HashtagProvider` で一元管理（毎シーズン変わる可能性あり）
 - X APIの連続POSTは503になるため、`TwitterApiSender` が送信後に1秒のインターバルを置いている

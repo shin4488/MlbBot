@@ -40,6 +40,7 @@ namespace TwitterMlbBot
                         RequireEnvironmentVariable("ACCESS_SECRET")),
                     loggerFactory.CreateLogger<TwitterApiSender>());
             BotRunner runner = new BotRunner(
+                new MlbStatsApiClient(loggerFactory.CreateLogger<MlbStatsApiClient>()),
                 standingsProvider,
                 new TweetComposer(new HashtagProvider()),
                 tweetSender,
