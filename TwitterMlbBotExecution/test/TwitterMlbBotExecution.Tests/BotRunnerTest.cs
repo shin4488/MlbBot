@@ -58,7 +58,9 @@ public class BotRunnerTest
         };
     }
 
-    private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
+    // 7月の日付: ワイルドカード（8月以降のみ）を含まない、地区ツイートだけの基本ケースに使う
+    private static readonly DateOnly julyDate = new DateOnly(2026, 7, 15);
+    private static readonly DateOnly augustDate = new DateOnly(2026, 8, 30);
 
     private static BotRunner CreateRunner(List<TeamStanding> standings, FakeTweetSender sender)
     {
@@ -74,7 +76,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
 
         Assert.Equal(2, sender.SentContents.Count);
         Assert.Contains(sender.SentContents, content => content.Contains("White Sox"));
@@ -86,7 +88,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026, testDate);
+        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026, julyDate);
 
         Assert.Empty(sender.SentContents);
     }
@@ -97,7 +99,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender(_ => false);
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate));
+            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate));
     }
 
     [Fact]
@@ -106,8 +108,30 @@ public class BotRunnerTest
         // 重複コンテンツ拒否など、一部失敗は正常系でも起きるため
         var sender = new FakeTweetSender(content => content.Contains("Dodgers"));
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, testDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
 
         Assert.Equal(2, sender.SentContents.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_8月以降はワイルドカードもあわせて送信する()
+    {
+        var sender = new FakeTweetSender();
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, augustDate);
+
+        // 地区2件 + 各リーグのワイルドカード2件
+        Assert.Equal(4, sender.SentContents.Count);
+        Assert.Equal(2, sender.SentContents.Count(content => content.Contains("Wild Card")));
+    }
+
+    [Fact]
+    public async Task RunAsync_7月まではワイルドカードを送信しない()
+    {
+        var sender = new FakeTweetSender();
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+
+        Assert.DoesNotContain(sender.SentContents, content => content.Contains("Wild Card"));
     }
 }
