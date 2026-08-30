@@ -180,6 +180,23 @@ public class TweetComposerTest
     }
 
     [Fact]
+    public void ComposeWildCards_全チームが圏内なら境界線を表示しない()
+    {
+        // 圏外チームがいない（データ欠け等で対象チームが少ない）場合に無意味な区切り線を出さない
+        var standings = new List<TeamStanding>
+        {
+            CreateTeam("AL", "Central", "White Sox", 95, 45, 0.679),
+            CreateTeam("AL", "Central", "Astros", 88, 52, 0.629),
+            CreateTeam("AL", "Central", "Dodgers", 87, 53, 0.621),
+        };
+        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
+
+        var tweet = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
+
+        Assert.DoesNotContain("---", tweet.Text);
+    }
+
+    [Fact]
     public void ComposeWildCards_表示は5チームまで()
     {
         string text = ComposeWildCard().Text;

@@ -203,6 +203,22 @@ public class BotRunnerTest
         Assert.NotEmpty(sender.SentContents);
     }
 
+    [Fact]
+    public async Task RunAsync_文字数上限を超える可能性のある文面でも送信は試みる()
+    {
+        // Xの実際の判定は重み付きの独自カウントのため、近似カウントの超過では送信を止めない仕様（警告のみ）
+        var sender = new FakeTweetSender();
+        var standings = new List<TeamStanding>
+        {
+            new TeamStanding { League = "AL", Division = "Central", Name = new string('A', 300), Wins = 84, Losses = 56, Percentage = 0.600 },
+        };
+
+        await CreateRunner(standings, sender).RunAsync(2026, julyDate);
+
+        string sent = Assert.Single(sender.SentContents);
+        Assert.True(sent.Length > TweetContent.CharacterLimit, "上限超過の文面が題材になっていること");
+    }
+
     [Theory]
     [InlineData(11)]
     [InlineData(12)]
