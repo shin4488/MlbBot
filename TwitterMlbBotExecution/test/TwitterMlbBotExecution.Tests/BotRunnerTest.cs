@@ -18,6 +18,8 @@ public class BotRunnerTest
     {
         private readonly List<TeamStanding> standings;
 
+        public int CallCount { get; private set; }
+
         public FakeStandingsProvider(List<TeamStanding> standings)
         {
             this.standings = standings;
@@ -25,7 +27,23 @@ public class BotRunnerTest
 
         public Task<List<TeamStanding>> GetStandingsAsync(int year)
         {
+            CallCount++;
             return Task.FromResult(this.standings);
+        }
+    }
+
+    private class FakeSeasonCalendarProvider : ISeasonCalendarProvider
+    {
+        private readonly Func<SeasonCalendar> getResult;
+
+        public FakeSeasonCalendarProvider(Func<SeasonCalendar>? getResult = null)
+        {
+            this.getResult = getResult ?? (() => new SeasonCalendar(seasonEndDate));
+        }
+
+        public Task<SeasonCalendar> GetSeasonCalendarAsync(int year)
+        {
+            return Task.FromResult(this.getResult());
         }
     }
 
@@ -61,11 +79,20 @@ public class BotRunnerTest
     // 7月の日付: ワイルドカード（8月以降のみ）を含まない、地区ツイートだけの基本ケースに使う
     private static readonly DateOnly julyDate = new DateOnly(2026, 7, 15);
     private static readonly DateOnly augustDate = new DateOnly(2026, 8, 30);
+    private static readonly DateOnly seasonEndDate = new DateOnly(2026, 9, 27);
 
-    private static BotRunner CreateRunner(List<TeamStanding> standings, FakeTweetSender sender)
+    private static BotRunner CreateRunner(
+        List<TeamStanding> standings, FakeTweetSender sender, ISeasonCalendarProvider? seasonProvider = null)
+    {
+        return CreateRunner(new FakeStandingsProvider(standings), sender, seasonProvider);
+    }
+
+    private static BotRunner CreateRunner(
+        FakeStandingsProvider standingsProvider, FakeTweetSender sender, ISeasonCalendarProvider? seasonProvider = null)
     {
         return new BotRunner(
-            new FakeStandingsProvider(standings),
+            seasonProvider ?? new FakeSeasonCalendarProvider(),
+            standingsProvider,
             new TweetComposer(new HashtagProvider()),
             sender,
             NullLogger<BotRunner>.Instance);
@@ -133,5 +160,43 @@ public class BotRunnerTest
         await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
 
         Assert.DoesNotContain(sender.SentContents, content => content.Contains("Wild Card"));
+    }
+
+    [Fact]
+    public async Task RunAsync_シーズン終了後は順位取得もツイートもしない()
+    {
+        var sender = new FakeTweetSender();
+        var standingsProvider = new FakeStandingsProvider(CreateTwoDivisionStandings());
+
+        await CreateRunner(standingsProvider, sender).RunAsync(2026, seasonEndDate.AddDays(1));
+
+        Assert.Empty(sender.SentContents);
+        // オフシーズン中のMLB API呼び出し（クォータ消費）も止める仕様
+        Assert.Equal(0, standingsProvider.CallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_シーズン最終日の分はツイートする()
+    {
+        // 最終戦の結果を反映した最終順位はツイートされること（境界）
+        var sender = new FakeTweetSender();
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, seasonEndDate);
+
+        Assert.NotEmpty(sender.SentContents);
+    }
+
+    [Fact]
+    public async Task RunAsync_シーズン日程の取得に失敗したら例外を投げてツイートしない()
+    {
+        // 黙ってスキップ・黙って投稿のどちらもせず異常終了させ、エラーアラームのメール通知につなげる仕様
+        var sender = new FakeTweetSender();
+        var failingProvider = new FakeSeasonCalendarProvider(
+            () => throw new InvalidOperationException("シーズン日程の取得失敗"));
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider).RunAsync(2026, julyDate));
+
+        Assert.Empty(sender.SentContents);
     }
 }

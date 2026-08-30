@@ -6,21 +6,24 @@ using TwitterMlbBot.Twitter;
 namespace TwitterMlbBot
 {
     /// <summary>
-    /// 「順位取得 → 地区順位表化 → 文面組み立て → 送信」のオーケストレーションだけを持つクラス
+    /// 「シーズン判定 → 順位取得 → 地区順位表化 → 文面組み立て → 送信」のオーケストレーションだけを持つクラス
     /// </summary>
     internal class BotRunner
     {
+        private readonly ISeasonCalendarProvider seasonCalendarProvider;
         private readonly IStandingsProvider standingsProvider;
         private readonly TweetComposer composer;
         private readonly ITweetSender tweetSender;
         private readonly ILogger<BotRunner> logger;
 
         public BotRunner(
+            ISeasonCalendarProvider seasonCalendarProvider,
             IStandingsProvider standingsProvider,
             TweetComposer composer,
             ITweetSender tweetSender,
             ILogger<BotRunner> logger)
         {
+            this.seasonCalendarProvider = seasonCalendarProvider;
             this.standingsProvider = standingsProvider;
             this.composer = composer;
             this.tweetSender = tweetSender;
@@ -34,6 +37,16 @@ namespace TwitterMlbBot
         /// <param name="date">ツイート文面に表示する日付</param>
         public async Task RunAsync(int year, DateOnly date)
         {
+            // レギュラーシーズン終了後は順位が動かないため、順位取得もツイートもせずに終了する
+            // （凍結した順位の投稿と、X API・MLB APIの無駄な消費をオフシーズン中ずっと防ぐ）
+            SeasonCalendar season = await this.seasonCalendarProvider.GetSeasonCalendarAsync(year);
+            if (season.IsFinished(date))
+            {
+                this.logger.LogInformation(
+                    "レギュラーシーズン終了後のためツイートしません（終了日: {EndDate}）", season.RegularSeasonEndDate);
+                return;
+            }
+
             List<TeamStanding> standings = await this.standingsProvider.GetStandingsAsync(year);
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
             List<TweetContent> tweetContentList = new(this.composer.Compose(divisions, date));
