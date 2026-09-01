@@ -8,27 +8,36 @@ namespace TwitterMlbBot.Composing
     internal class HashtagProvider
     {
         /// <summary>
-        /// MLB公式チームハッシュタグマップ（チーム名と公式タグが異なるもののみ定義）
-        /// 毎シーズン変更の可能性があるため、ここで一元管理する
+        /// MLB公式チームハッシュタグマップ（全30球団）
+        /// 公式タグがチーム名と同じ球団も、考慮漏れと区別がつくよう省略せず定義する
+        /// （全30球団が定義されていることはテストが検証する）
+        /// 毎シーズン変更の可能性があるため、ここで一元管理する。
+        /// 並びは公式発表のタグ一覧と突き合わせやすいよう球団略号のアルファベット順
         /// </summary>
-        private static readonly Dictionary<string, string> OfficialHashtagMap =
+        internal static readonly Dictionary<string, string> OfficialHashtagMap =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Diamondbacks", "Dbacks" },
+                { "Athletics",    "Athletics" },
                 { "Braves",       "BravesCountry" },
                 { "Orioles",      "Birdland" },
                 { "Red Sox",      "DirtyWater" },
+                { "Cubs",         "Cubs" },
+                { "White Sox",    "WhiteSox" },
                 { "Reds",         "ATOBTTR" },
                 { "Guardians",    "GuardsBall" },
+                { "Rockies",      "Rockies" },
                 { "Tigers",       "DNMW" },
-                { "Phillies",     "RingTheBell" },
+                { "Astros",       "ChaseTheFight" },
                 { "Royals",       "FountainsUp" },
                 { "Angels",       "RepTheHalo" },
+                { "Dodgers",      "Dodgers" },
                 { "Marlins",      "FightinFish" },
                 { "Brewers",      "ThisIsMyCrew" },
                 { "Twins",        "NoPlaceLikeHERE" },
                 { "Mets",         "LGM" },
                 { "Yankees",      "RepBX" },
+                { "Phillies",     "RingTheBell" },
                 { "Pirates",      "LetsGoBucs" },
                 { "Padres",       "ForTheFaithful" },
                 { "Mariners",     "TridentsUp" },
@@ -64,9 +73,10 @@ namespace TwitterMlbBot.Composing
         {
             string nameNoSpace = Regex.Replace(teamName, @"\s", "");
             return this.officialHashtagMap.TryGetValue(teamName, out string? officialTag)
+                    && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase)
                 // 公式タグ + 元チーム名タグの両方を付ける
                 ? $"#{officialTag} #{nameNoSpace}"
-                // チーム名と公式タグが同じ場合はそのまま使用
+                // 公式タグがチーム名と同じ場合（およびマップ未定義の場合）はチーム名タグのみ使用
                 : $"#{nameNoSpace}";
         }
     }
