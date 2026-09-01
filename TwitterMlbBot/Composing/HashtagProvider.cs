@@ -21,6 +21,7 @@ namespace TwitterMlbBot.Composing
                 { "Reds",         "ATOBTTR" },
                 { "Guardians",    "GuardsBall" },
                 { "Tigers",       "DNMW" },
+                { "Astros",       "ChaseTheFight" },
                 { "Phillies",     "RingTheBell" },
                 { "Royals",       "FountainsUp" },
                 { "Angels",       "RepTheHalo" },
