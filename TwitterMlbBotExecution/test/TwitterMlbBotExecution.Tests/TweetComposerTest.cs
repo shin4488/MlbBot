@@ -197,17 +197,17 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void ComposeWildCards_表示は5チームまで()
+    public void ComposeWildCards_表示は6チームまで()
     {
         string text = ComposeWildCard().Text;
 
-        Assert.Contains("5. ", text);
-        Assert.DoesNotContain("6. ", text);
+        Assert.Contains("6. ", text);
+        Assert.DoesNotContain("7. ", text);
     }
 
     /// <summary>
-    /// 1リーグ・首位1チーム＋ワイルドカード6チームのデータでWCツイートを1件生成する
-    /// （6番目のチームは表示上限の検証用）
+    /// 1リーグ・首位1チーム＋ワイルドカード7チームのデータでWCツイートを1件生成する
+    /// （7番目のチームは表示上限の検証用）
     /// </summary>
     private static TweetContent ComposeWildCard()
     {
@@ -220,6 +220,7 @@ public class TweetComposerTest
             CreateTeam("AL", "Central", "Cubs", 85, 55, 0.607),
             CreateTeam("AL", "Central", "Angels", 82, 58, 0.586),
             CreateTeam("AL", "Central", "Athletics", 80, 60, 0.571),
+            CreateTeam("AL", "Central", "Mets", 78, 62, 0.557),
         };
         var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
         return Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));

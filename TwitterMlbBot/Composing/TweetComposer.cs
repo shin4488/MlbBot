@@ -12,9 +12,9 @@ namespace TwitterMlbBot.Composing
     {
         /// <summary>
         /// ワイルドカードツイートに表示するチーム数
-        /// （プレーオフ圏内3チーム + 追走2チーム。文字数と情報価値のバランスで決めた表示都合の値）
+        /// （プレーオフ圏内3チーム + 追走3チーム。文字数と情報価値のバランスで決めた表示都合の値）
         /// </summary>
-        private const int wildCardDisplayCount = WildCardStanding.PlayoffSpots + 2;
+        private const int wildCardDisplayCount = WildCardStanding.PlayoffSpots + 3;
 
         private readonly HashtagProvider hashtagProvider;
 
@@ -52,12 +52,15 @@ namespace TwitterMlbBot.Composing
             var buffer = new StringBuilder();
             AppendHeader(buffer, date, $"{division.League} {division.Division}");
 
+            // 順位表の前後に空行を挟み、ヘッダ行・タグ行と視覚的に区切る
+            buffer.AppendLine();
             foreach (RankedTeam rankedTeam in division.RankedTeams)
             {
                 // 首位のゲーム差（常に0）は意味を持たないため表示しない
                 float? gamesBehindToShow = rankedTeam.Rank > 1 ? rankedTeam.Team.GamesBehind : null;
                 AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
             }
+            buffer.AppendLine();
 
             AppendHashtags(buffer, division.RankedTeams.Take(2).Select(ranked => ranked.Team));
             return new TweetContent(buffer.ToString());
@@ -68,6 +71,8 @@ namespace TwitterMlbBot.Composing
             var buffer = new StringBuilder();
             AppendHeader(buffer, date, $"{wildCard.League} Wild Card");
 
+            // 順位表の前後に空行を挟み、ヘッダ行・タグ行と視覚的に区切る
+            buffer.AppendLine();
             foreach (RankedWildCardTeam rankedTeam in wildCard.RankedTeams.Take(wildCardDisplayCount))
             {
                 // プレーオフ圏と圏外の境界を区切り線で示し、「あと何ゲームで圏内か」を読み取りやすくする
@@ -81,6 +86,7 @@ namespace TwitterMlbBot.Composing
                     : null;
                 AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
             }
+            buffer.AppendLine();
 
             AppendHashtags(buffer, wildCard.RankedTeams.Take(2).Select(ranked => ranked.Team));
             return new TweetContent(buffer.ToString());
@@ -91,7 +97,6 @@ namespace TwitterMlbBot.Composing
             // 凡例（W-L (GB)）をヘッダ行に同居させ、数字の意味を示しつつ行数を抑える。
             // 読者は英語圏想定のため文面は英語で統一
             buffer
-                .Append("📅 ")
                 .Append(date.ToString("M/d", CultureInfo.InvariantCulture))
                 .Append(" ⚾ ")
                 .Append(title)
