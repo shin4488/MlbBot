@@ -1,28 +1,20 @@
 name: CI
-# PR段階でビルド・テストを検証する（masterへのpush時はlambda_deploy.ymlのverifyジョブが同等の検証を行う）
+# PR段階でビルド・フォーマット・テストを検証する（masterへのpush時はlambda_deploy.ymlのverifyジョブが同じ検証を行う）
 on:
   pull_request:
 
+# GITHUB_TOKENの権限は最小限にする（このワークフローはリポジトリの読み取りしか必要としない）
+permissions:
+  contents: read
+
 jobs:
+  # ジョブ名はbranch protectionの必須チェック名として参照されているため変更しない
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Build
-        run: dotnet build MlbBot.sln --configuration Release
-
-      - name: Format check
-        # .editorconfigとdotnet format既定値への準拠を検証（違反時はローカルで dotnet format MlbBot.sln を実行して修正）
-        run: dotnet format MlbBot.sln --verify-no-changes --no-restore
-
-      - name: Test
-        # FunctionTestは実ツイートが投稿されるためSkip指定済み（FunctionTest.cs参照）。
-        # 純粋な単体テストが追加されたらここで実行される
-        run: dotnet test MlbBot.sln --configuration Release --no-build
+      - name: Build, format check and test
+        uses: ./.github/actions/verify-dotnet

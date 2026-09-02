@@ -25,10 +25,10 @@ public class BotRunnerTest
             this.standings = standings;
         }
 
-        public Task<List<TeamStanding>> GetStandingsAsync(int year)
+        public Task<IReadOnlyList<TeamStanding>> GetStandingsAsync(int year)
         {
             CallCount++;
-            return Task.FromResult(this.standings);
+            return Task.FromResult<IReadOnlyList<TeamStanding>>(this.standings);
         }
     }
 
@@ -53,6 +53,7 @@ public class BotRunnerTest
 
         public List<string> SentContents { get; } = new();
 
+        /// <param name="sendResult">文面ごとの送信結果（false=失敗）。例外を投げると送信先の障害を模擬できる</param>
         public FakeTweetSender(Func<string, bool>? sendResult = null)
         {
             this.sendResult = sendResult ?? (_ => true);
@@ -138,6 +139,29 @@ public class BotRunnerTest
         await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
 
         Assert.Equal(2, sender.SentContents.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_1件の送信で例外が起きても残りのツイートは送信する()
+    {
+        // タイムアウト等で送信先が例外を投げても、その1件の失敗にとどめて他の地区は投稿する仕様
+        var sender = new FakeTweetSender(content =>
+            content.Contains("White Sox") ? throw new HttpRequestException("送信失敗") : true);
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+
+        Assert.Equal(2, sender.SentContents.Count);
+        Assert.Contains(sender.SentContents, content => content.Contains("Dodgers"));
+    }
+
+    [Fact]
+    public async Task RunAsync_全件の送信で例外が起きた場合は例外を投げる()
+    {
+        // 例外による失敗も「失敗」として数え、全滅ならエラー終了（アラーム通知）につなげる
+        var sender = new FakeTweetSender(_ => throw new HttpRequestException("送信失敗"));
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate));
     }
 
     [Fact]

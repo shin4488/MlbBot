@@ -4,34 +4,34 @@ using Xunit;
 namespace TwitterMlbBotExecution.Tests;
 
 /// <summary>
-/// OAuth 1.0a署名ベース文字列のパラメータ結合のテスト
-/// OAuth 1.0a仕様（キーの辞書順・URLエンコード・&連結）に基づく検証で、実装の内部構造には依存しない
+/// OAuth 1.0a署名生成（OAuth1.CreateAuthorizationData）のテスト
+/// タイムスタンプ・nonceを固定入力に差し替え、署名値を検証する。
+/// 期待値は実装とは独立に、OAuth 1.0a仕様（RFC 5849）どおり
+/// 「POST&url&ソート済みパラメータ をキー consumer_secret&access_secret でHMAC-SHA1」
+/// をPythonで計算して導出したもの。パラメータの辞書順ソートやURLエンコードが崩れれば
+/// 署名値が変わるため、内部の結合処理を個別にテストせずこの1本で仕様を担保する
 /// </summary>
 public class OAuth1Test
 {
     [Fact]
-    public void CombineQueryParams_パラメータが空なら空文字列を返す()
+    public void CreateAuthorizationData_固定入力に対する署名が仕様どおり生成される()
     {
-        var oauth = new OAuth1("ck", "cs", "ak", "as");
+        var oauth = new OAuth1(
+            "consumer-key", "consumer-secret", "access-key", "access-secret",
+            timestampProvider: () => "1700000000",
+            nonceProvider: () => "testnonce");
 
-        Assert.Equal(string.Empty, oauth.CombineQueryParams(new Dictionary<string, string>()));
-        Assert.Equal(string.Empty, oauth.CombineQueryParams(null));
-    }
+        string authorization = oauth.CreateAuthorizationData("https://api.twitter.com/2/tweets");
 
-    [Fact]
-    public void CombineQueryParams_キーの辞書順にURLエンコードして連結する()
-    {
-        var oauth = new OAuth1("ck", "cs", "ak", "as");
-        // あえて辞書順と逆の順序で渡す
-        var parameters = new Dictionary<string, string>
-        {
-            { "oauth_token", "token value" },
-            { "oauth_nonce", "abc123" },
-        };
-
-        string combined = oauth.CombineQueryParams(parameters);
-
-        // 辞書順に並び、値はURLエンコード（スペース→%20）され、&で連結される
-        Assert.Equal("oauth_nonce=abc123&oauth_token=token%20value", combined);
+        // 独立に導出した期待署名（URLエンコード済み）。ダミーの鍵から計算した値であり機密ではない
+        // （gitleaksが高エントロピー文字列として誤検出するため除外指定）
+        Assert.Contains(@"oauth_signature=""2hYaKhmOvXjqImlN1KdJPLDQ1Zg%3D""", authorization); // gitleaks:allow
+        // ヘッダに必要なパラメータが揃っていること
+        Assert.Contains(@"oauth_consumer_key=""consumer-key""", authorization);
+        Assert.Contains(@"oauth_token=""access-key""", authorization);
+        Assert.Contains(@"oauth_signature_method=""HMAC-SHA1""", authorization);
+        Assert.Contains(@"oauth_timestamp=""1700000000""", authorization);
+        Assert.Contains(@"oauth_nonce=""testnonce""", authorization);
+        Assert.Contains(@"oauth_version=""1.0""", authorization);
     }
 }

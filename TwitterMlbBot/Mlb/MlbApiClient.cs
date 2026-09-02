@@ -23,13 +23,13 @@ namespace TwitterMlbBot.Mlb
             this.logger = logger;
         }
 
-        public async Task<List<TeamStanding>> GetStandingsAsync(int year)
+        public async Task<IReadOnlyList<TeamStanding>> GetStandingsAsync(int year)
         {
             using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, endpoint + year);
             // APIキーはURIに含めずヘッダーで渡す（URIがログや例外メッセージに出てもキーが漏れないようにする）
             request.Headers.Add("Ocp-Apim-Subscription-Key", this.apiKey);
 
-            HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
+            using HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {

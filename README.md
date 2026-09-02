@@ -88,7 +88,7 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 
 ## ⚠️ 注意事項
 
-1. **masterへのマージは本番デプロイ**。[.github/workflows/lambda_deploy.yml](.github/workflows/lambda_deploy.yml) により、ビルド・テスト検証後にAWS Lambdaへ自動デプロイされる（`.md`・`.github/`・`.vscode/`・`.gitignore` のみの変更は除く）。masterはbranch protectionで保護されており、直pushは拒否される（PR + CIチェック `build-and-test` の通過が必須）。
+1. **masterへのマージは本番デプロイ**。[.github/workflows/lambda_deploy.yml](.github/workflows/lambda_deploy.yml) により、ビルド・フォーマット・テスト検証後にAWS Lambdaへ自動デプロイされる（`.md`・`.github/`・`.claude/`・`.vscode/`・`.gitignore`・`infra/` のみの変更は除く）。masterはbranch protectionで保護されており、直pushは拒否される（PR + CIチェック `build-and-test` の通過が必須）。
 2. **`FunctionTest` は手動疎通確認専用**。本番の `Program.Main` をそのまま実行するためSkip指定してある。Skipを外して実行すると実際にツイートが投稿される。
 3. **シークレットをコミットしない**。APIキーは環境変数でのみ扱い、リポジトリ内のファイルには書かない。
 

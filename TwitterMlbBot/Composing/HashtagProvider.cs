@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace TwitterMlbBot.Composing
 {
     /// <summary>
@@ -14,7 +12,7 @@ namespace TwitterMlbBot.Composing
         /// 毎シーズン変更の可能性があるため、ここで一元管理する。
         /// 並びは公式発表のタグ一覧と突き合わせやすいよう球団略号のアルファベット順
         /// </summary>
-        internal static readonly Dictionary<string, string> OfficialHashtagMap =
+        internal static readonly IReadOnlyDictionary<string, string> OfficialHashtagMap =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Diamondbacks", "Dbacks" },
@@ -49,7 +47,7 @@ namespace TwitterMlbBot.Composing
                 { "Nationals",    "Natitude" },
             };
 
-        private readonly Dictionary<string, string> officialHashtagMap;
+        private readonly IReadOnlyDictionary<string, string> officialHashtagMap;
 
         public HashtagProvider() : this(OfficialHashtagMap)
         {
@@ -58,7 +56,7 @@ namespace TwitterMlbBot.Composing
         /// <summary>
         /// テスト用にタグマップを差し替えられるコンストラクタ
         /// </summary>
-        internal HashtagProvider(Dictionary<string, string> officialHashtagMap)
+        internal HashtagProvider(IReadOnlyDictionary<string, string> officialHashtagMap)
         {
             this.officialHashtagMap = officialHashtagMap;
         }
@@ -71,7 +69,8 @@ namespace TwitterMlbBot.Composing
         /// <returns>ハッシュタグ文字列（例: "#Dbacks #Diamondbacks"）</returns>
         public string GetHashtags(string teamName)
         {
-            string nameNoSpace = Regex.Replace(teamName, @"\s", "");
+            // ハッシュタグに空白は使えないため除去する（"Red Sox" → "RedSox"）
+            string nameNoSpace = teamName.Replace(" ", "");
             return this.officialHashtagMap.TryGetValue(teamName, out string? officialTag)
                     && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase)
                 // 公式タグ + 元チーム名タグの両方を付ける
