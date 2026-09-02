@@ -2,8 +2,8 @@ namespace TwitterMlbBot.Mlb
 {
     /// <summary>
     /// MLB APIレスポンスのチーム順位データ（不変）
-    /// 使用するプロパティのみ定義する（未定義の項目はデシリアライズ時に無視される。
-    /// APIが返す全項目は docs/tweet-content-ideas.md 項目4の表を参照）
+    /// 使用するプロパティのみ定義する（未定義の項目はデシリアライズ時に無視される）。
+    /// プロパティ名はAPIのJSONキー（PascalCase）と一致させてあり、属性なしでデシリアライズできる
     /// </summary>
     internal record TeamStanding
     {

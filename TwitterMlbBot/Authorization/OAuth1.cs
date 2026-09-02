@@ -1,9 +1,14 @@
-using System.Text;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace TwitterMlbBot.Authorization
 {
-    public class OAuth1
+    /// <summary>
+    /// OAuth 1.0a（HMAC-SHA1）のAuthorizationヘッダ値を生成する。
+    /// X API v2の投稿にはユーザーコンテキスト認証が必要で、OAuth 1.0aのアクセストークンは失効しないため、
+    /// トークン更新の仕組みを持たない無人ボットに向く
+    /// </summary>
+    internal class OAuth1
     {
         private readonly string consumerKey;
         private readonly string consumerSecret;
@@ -33,15 +38,19 @@ namespace TwitterMlbBot.Authorization
             this.nonceProvider = nonceProvider;
         }
 
+        /// <summary>
+        /// POSTリクエスト用のAuthorizationヘッダ値（"OAuth " に続く部分）を生成する
+        /// </summary>
+        /// <param name="endpoint">リクエスト先URL（クエリ文字列なし）</param>
         public string CreateAuthorizationData(string endpoint)
         {
-            string timstamp = this.timestampProvider();
+            string timestamp = this.timestampProvider();
             string nonce = this.nonceProvider();
-            string signatureBase64 = this.CreateSignature(endpoint, "POST", nonce, timstamp);
+            string signatureBase64 = this.CreateSignature(endpoint, "POST", nonce, timestamp);
             return $@"oauth_consumer_key=""{Uri.EscapeDataString(this.consumerKey)}""" +
                     $@",oauth_token=""{Uri.EscapeDataString(this.accessKey)}""" +
                     $@",oauth_signature_method=""HMAC-SHA1""" +
-                    $@",oauth_timestamp=""{Uri.EscapeDataString(timstamp)}""" +
+                    $@",oauth_timestamp=""{Uri.EscapeDataString(timestamp)}""" +
                     $@",oauth_nonce=""{Uri.EscapeDataString(nonce)}""" +
                     $@",oauth_version=""1.0""" +
                     $@",oauth_signature=""{Uri.EscapeDataString(signatureBase64)}""";
@@ -49,27 +58,27 @@ namespace TwitterMlbBot.Authorization
 
         private string CreateSignature(string url, string method, string nonce, string timestamp)
         {
-            var parameters = new Dictionary<string, string>();
-            parameters.Add("oauth_consumer_key", this.consumerKey);
-            parameters.Add("oauth_nonce", nonce);
-            parameters.Add("oauth_signature_method", "HMAC-SHA1");
-            parameters.Add("oauth_timestamp", timestamp);
-            parameters.Add("oauth_token", this.accessKey);
-            parameters.Add("oauth_version", "1.0");
+            // 署名対象はOAuthパラメータのみ。X API v2はJSONボディで投稿するため、ボディの内容は署名に含めない
+            // （OAuth 1.0aの署名対象になるのは application/x-www-form-urlencoded のボディだけ）
+            var parameters = new Dictionary<string, string>
+            {
+                { "oauth_consumer_key", this.consumerKey },
+                { "oauth_nonce", nonce },
+                { "oauth_signature_method", "HMAC-SHA1" },
+                { "oauth_timestamp", timestamp },
+                { "oauth_token", this.accessKey },
+                { "oauth_version", "1.0" },
+            };
 
-            var sigBaseString = this.CombineQueryParams(parameters);
-            var signatureBaseString =
-                method.ToString() + "&" +
+            string signatureBaseString =
+                method + "&" +
                 Uri.EscapeDataString(url) + "&" +
-                Uri.EscapeDataString(sigBaseString.ToString());
-            var compositeKey =
+                Uri.EscapeDataString(CombineQueryParams(parameters));
+            string compositeKey =
                 Uri.EscapeDataString(this.consumerSecret) + "&" +
                 Uri.EscapeDataString(this.accessSecret);
-            using (var hasher = new HMACSHA1(Encoding.ASCII.GetBytes(compositeKey)))
-            {
-                return Convert.ToBase64String(hasher.ComputeHash(
-                    Encoding.ASCII.GetBytes(signatureBaseString)));
-            }
+            using var hasher = new HMACSHA1(Encoding.ASCII.GetBytes(compositeKey));
+            return Convert.ToBase64String(hasher.ComputeHash(Encoding.ASCII.GetBytes(signatureBaseString)));
         }
 
         private static string CreateTimestamp()
@@ -85,26 +94,12 @@ namespace TwitterMlbBot.Authorization
             return Guid.NewGuid().ToString("N");
         }
 
-        public string CombineQueryParams(Dictionary<string, string>? parameters)
+        private static string CombineQueryParams(IReadOnlyDictionary<string, string> parameters)
         {
-            if (parameters == null || !parameters.Any())
-            {
-                return string.Empty;
-            }
-
-            var buffer = new StringBuilder();
-            // OAuth 1.0a仕様では署名ベース文字列のパラメータをキーの辞書順に並べる必要がある
-            foreach (var param in parameters.OrderBy(p => p.Key, StringComparer.Ordinal))
-            {
-                buffer
-                    .Append(param.Key)
-                    .Append("=")
-                    .Append(Uri.EscapeDataString(param.Value))
-                    .Append("&");
-            }
-
-            // 末尾の&以降は、その後に続くパラメータが存在しないため不要
-            return buffer.ToString().TrimEnd('&');
+            // OAuth 1.0a仕様では署名ベース文字列のパラメータをキーの辞書順に並べ、"key=value" を & で連結する
+            return string.Join("&", parameters
+                .OrderBy(parameter => parameter.Key, StringComparer.Ordinal)
+                .Select(parameter => parameter.Key + "=" + Uri.EscapeDataString(parameter.Value)));
         }
     }
 }

@@ -14,7 +14,7 @@ namespace TwitterMlbBot.Composing
         /// ワイルドカードツイートに表示するチーム数
         /// （プレーオフ圏内3チーム + 追走3チーム。文字数と情報価値のバランスで決めた表示都合の値）
         /// </summary>
-        private const int wildCardDisplayCount = WildCardStanding.PlayoffSpots + 3;
+        private const int WildCardDisplayCount = WildCardStanding.PlayoffSpots + 3;
 
         private readonly HashtagProvider hashtagProvider;
 
@@ -73,7 +73,7 @@ namespace TwitterMlbBot.Composing
 
             // 順位表の前後に空行を挟み、ヘッダ行・タグ行と視覚的に区切る
             buffer.AppendLine();
-            foreach (RankedWildCardTeam rankedTeam in wildCard.RankedTeams.Take(wildCardDisplayCount))
+            foreach (RankedWildCardTeam rankedTeam in wildCard.RankedTeams.Take(WildCardDisplayCount))
             {
                 // プレーオフ圏と圏外の境界を区切り線で示し、「あと何ゲームで圏内か」を読み取りやすくする
                 if (rankedTeam.Rank == WildCardStanding.PlayoffSpots + 1)
