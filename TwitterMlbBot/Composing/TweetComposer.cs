@@ -57,7 +57,7 @@ namespace TwitterMlbBot.Composing
             foreach (RankedTeam rankedTeam in division.RankedTeams)
             {
                 // 首位のゲーム差（常に0）は意味を持たないため表示しない
-                float? gamesBehindToShow = rankedTeam.Rank > 1 ? rankedTeam.Team.GamesBehind : null;
+                float? gamesBehindToShow = rankedTeam.Rank > 1 ? rankedTeam.GamesBehind : null;
                 AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
             }
             buffer.AppendLine();
@@ -73,7 +73,7 @@ namespace TwitterMlbBot.Composing
 
             // 順位表の前後に空行を挟み、ヘッダ行・タグ行と視覚的に区切る
             buffer.AppendLine();
-            foreach (RankedWildCardTeam rankedTeam in wildCard.RankedTeams.Take(WildCardDisplayCount))
+            foreach (RankedTeam rankedTeam in wildCard.RankedTeams.Take(WildCardDisplayCount))
             {
                 // プレーオフ圏と圏外の境界を区切り線で示し、「あと何ゲームで圏内か」を読み取りやすくする
                 if (rankedTeam.Rank == WildCardStanding.PlayoffSpots + 1)
@@ -82,7 +82,7 @@ namespace TwitterMlbBot.Composing
                 }
                 // 圏内チームのゲーム差（ボーダーより上）は表示せず、圏外チームのみボーダーとの差を示す
                 float? gamesBehindToShow = rankedTeam.Rank > WildCardStanding.PlayoffSpots
-                    ? rankedTeam.GamesBehindPlayoffLine
+                    ? rankedTeam.GamesBehind
                     : null;
                 AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
             }

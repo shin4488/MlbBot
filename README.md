@@ -31,9 +31,9 @@ flowchart TB
     subgraph mlb["取得・ドメインモデル（Mlb/）"]
         ISC -.実装.-> MSC["MlbStatsApiClient<br>statsapi.mlb.com（公式・認証不要）"]
         MSC --> SC["SeasonCalendar（不変record）<br>シーズン終了判定のルールを保持"]
-        ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信"]
-        MAC --> TS["TeamStanding（不変record）<br>All-Star判定などのルールを保持"]
-        DS["DivisionStanding<br>地区順位表。順位順（RankedTeam）を型で保証"] --> TS
+        ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信<br>All-Star擬似チームはここで除外"]
+        MAC --> TS["TeamStanding（不変record）<br>勝率・ゲーム差・順位付け規則を保持"]
+        DS["DivisionStanding / WildCardStanding<br>順位表。順位順（RankedTeam）を型で保証"] --> TS
     end
 
     subgraph composing["文面組み立て（Composing/）<br>ネットワーク・設定に依存しない純粋ロジック"]

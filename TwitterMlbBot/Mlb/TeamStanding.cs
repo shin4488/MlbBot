@@ -1,50 +1,42 @@
 namespace TwitterMlbBot.Mlb
 {
     /// <summary>
-    /// MLB APIレスポンスのチーム順位データ（不変）
-    /// 使用するプロパティのみ定義する（未定義の項目はデシリアライズ時に無視される）。
-    /// プロパティ名はAPIのJSONキー（PascalCase）と一致させてあり、属性なしでデシリアライズできる
+    /// 1チームの成績（不変の値オブジェクト）。
+    /// 勝率・ゲーム差・順位付けといった「成績から導かれるルール」はすべてここに置き、
+    /// 順位表（DivisionStanding / WildCardStanding）はこのルールを組み合わせるだけにする
     /// </summary>
-    internal record TeamStanding
+    /// <param name="Name">チーム名（例: "Yankees"）</param>
+    /// <param name="League">リーグ名（"AL" / "NL"）</param>
+    /// <param name="Division">地区名（"East" / "Central" / "West"）</param>
+    /// <param name="Wins">勝ち数</param>
+    /// <param name="Losses">負け数</param>
+    internal record TeamStanding(string Name, string League, string Division, int Wins, int Losses)
     {
         /// <summary>
-        /// チーム名（例: "Yankees"）
+        /// 勝率。勝敗から一意に決まるため外部データとして持ち回らず算出する
+        /// （APIの値は小数3桁に丸められており、丸めた値で同率に見える2チームも正しい勝率で順位付けできる）
         /// </summary>
-        public string Name { get; init; } = "";
+        public double Percentage => Wins + Losses == 0 ? 0 : (double)Wins / (Wins + Losses);
 
         /// <summary>
-        /// リーグ名（"AL" / "NL"）
+        /// 基準チームとのゲーム差。基準より上位（貯金が多い）なら負の値になる
         /// </summary>
-        public string League { get; init; } = "";
+        /// <param name="baseline">基準チーム（地区順位では首位、ワイルドカードではプレーオフ圏ボーダー）</param>
+        public float GamesBehind(TeamStanding baseline)
+        {
+            // ゲーム差の定義: （基準チームの貯金 - 対象チームの貯金）/ 2
+            return ((baseline.Wins - baseline.Losses) - (Wins - Losses)) / 2f;
+        }
 
         /// <summary>
-        /// 地区名（"East" / "Central" / "West"。All-Star擬似チームのみリーグ名と同名）
+        /// 順位付けの規則で並べ替える（勝率降順、同率なら勝ち数降順）。
+        /// 地区順位・ワイルドカード順位のどちらもこの規則で決める
         /// </summary>
-        public string Division { get; init; } = "";
-
-        /// <summary>
-        /// 勝ち数
-        /// </summary>
-        public int Wins { get; init; }
-
-        /// <summary>
-        /// 負け数
-        /// </summary>
-        public int Losses { get; init; }
-
-        /// <summary>
-        /// 勝率
-        /// </summary>
-        public double Percentage { get; init; }
-
-        /// <summary>
-        /// 1つ上の順位のチームとのゲーム差
-        /// </summary>
-        public float? GamesBehind { get; init; }
-
-        /// <summary>
-        /// All-Star用の擬似チームかどうか（リーグ名と地区名が同一になるのが特徴）
-        /// </summary>
-        public bool IsAllStarPseudoTeam => League == Division;
+        public static IEnumerable<TeamStanding> OrderByRank(IEnumerable<TeamStanding> teams)
+        {
+            return teams
+                .OrderByDescending(team => team.Percentage)
+                .ThenByDescending(team => team.Wins);
+        }
     }
 }
