@@ -50,17 +50,17 @@ gh pr diff <N>
 
 - **CI が成功し、base に追随している**。追随していなければ Dependabot に rebase させ、CI の完了を待って再判定する。コンフリクトしていれば NG。
 
-  ```bash
-  gh pr checks <N>
-  gh pr comment <N> --body "@dependabot rebase"   # base に追随していないとき
-  gh pr checks <N> --watch                         # CI の完了を待つ
-  ```
+```bash
+gh pr checks <N>
+gh pr comment <N> --body "@dependabot rebase"   # base に追随していないとき
+gh pr checks <N> --watch                         # CI の完了を待つ
+```
 
 - **CI が実質的な検証をしている**。テストランナー・テスト SDK・テストフレームワークの更新では、テストが1件も検出されなくても CI が成功扱いになることがある。CI ログの実行件数が base 直近の実行と同じであることを確認し、減っていれば NG。
 
-  ```bash
-  gh run view <run-id> --log | grep -E "Passed!|Failed!|Total tests|passed|failed"
-  ```
+```bash
+gh run view <run-id> --log | grep -E "Passed!|Failed!|Total tests|passed|failed"
+```
 
 - **バージョン差分に応じた深さで変更内容を読む**。patch / minor は変更点をざっと確認する程度でよい。major はリリースノート・CHANGELOG・移行ガイドから破壊的変更（削除・改名された API、既定値や挙動の変更、対応ランタイムの変更）を洗い出し、それぞれこのリポジトリでの使用箇所と突き合わせる。本番コードの依存なら実行時の挙動変更（既定値・シリアライズ形式・タイムアウト・ログなど）も対象にする。判断に必要な情報が得られなければ NG。実行環境が使えるなら、PR ブランチでビルド・テストを自分でも実行して CI と同じ結果になることを確かめる。
 - **セキュリティ更新**（Dependabot alert 由来）は優先して処理するが、上記の確認は省略しない。
@@ -77,11 +77,11 @@ gh pr comment <N> --body-file <コメントを書いたファイル>
 
 - OK: リポジトリの慣例に合わせたマージ方式（マージコミット／squash／rebase は履歴を見て判断）でマージし、ブランチを削除する。マージがデプロイを起動するリポジトリでは、デプロイのワークフローの完了と結果を確認する。失敗した場合は以降の PR のマージを止め、報告に含める。
 
-  ```bash
-  gh pr merge <N> --merge --delete-branch   # マージ方式はリポジトリの慣例に合わせる
-  gh run list --limit 3                      # マージで起動したワークフローを特定する
-  gh run watch <run-id> --exit-status
-  ```
+```bash
+gh pr merge <N> --merge --delete-branch   # マージ方式はリポジトリの慣例に合わせる
+gh run list --limit 3                      # マージで起動したワークフローを特定する
+gh run watch <run-id> --exit-status
+```
 
 - NG: マージせず、コメントだけを残す。PR は閉じない（人が判断する）。
 
