@@ -5,6 +5,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # 公開直後のバージョンは更新対象にしない（侵害された配布物や、すぐ取り下げられる版は数日置くだけで多くが弾ける）
+    cooldown:
+      default-days: 7
     # masterへのマージは本番デプロイになるため、パッケージごとにPRを分けずまとめて1回のデプロイで済ませる
     groups:
       nuget-packages:
@@ -18,6 +21,8 @@ updates:
       - /.github/actions/verify-dotnet
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:

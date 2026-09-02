@@ -47,6 +47,7 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
   - `pre-pr-check` … コミット・PR前の最終確認（検証コマンド実行、gitleaks / git-secrets による機密情報スキャン、ドキュメント追随）
   - `pin-github-actions` … GitHub Actionsの `uses:` をフルcommit SHA + バージョンコメントに固定する（pinactを使う）
   - `spec-based-testing` … 仕様ベースのテストを書く／見直すための判断基準
+  - `review-dependabot-prs` … Dependabot PRのレビュー。OK/NGを問わずPRにレビューコメントを残し、OKならマージ・NGなら保留（毎週の routine から実行）
 
 ## ドライラン（ツイートせずに文面確認）
 
