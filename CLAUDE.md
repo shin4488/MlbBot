@@ -20,6 +20,8 @@ flowchart LR
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
 - `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、純粋ロジック・オーケストレーションの単体テスト（フェイク使用・ネットワーク不要）
 - `infra/` … Terraformによるインフラ管理（使い方・残タスクは [infra/README.md](infra/README.md)）
+- `.github/actions/verify-dotnet/` … ビルド・フォーマット検証・テストの共通ステップ（composite action）。PR検証（`ci.yml`）とデプロイ前ゲート（`lambda_deploy.yml`）の両方がこれを使い、検証内容の差異が生まれないようにしている。SDKバージョンは `global.json` から読む
+- `.claude/` … Claude Code用の設定（フック・skill）。詳細は後述の「Claude Code設定」
 
 ## ビルド・テスト
 
@@ -30,10 +32,20 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 ```
 
 - ターゲットは net10.0（3プロジェクトすべて）。SDKは `global.json` で10.0系に固定
+- `Directory.Build.props` で `TreatWarningsAsErrors` を有効にしている。警告が出た変更（依存パッケージの更新を含む）はその場で直す
 - コード内コメント・コミットメッセージのスタイルは日本語
 - `.editorconfig` は最小構成。C#スタイルはRoslyn / dotnet format の既定値に任せる方針
-- **テストは仕様ベースで書く**: 文面フォーマットの詳細・内部実装・具体的な例外型など変わりやすいものに依存させず、入出力の不変条件（データが文面に反映される、ツイートされない等）を検証する。リファクタや文面変更のたびにテストを直さなくて済む状態を保つ
-- `.tf` ファイルをEdit/Writeすると、PostToolUseフック（`.claude/hooks/terraform-check.sh`）が `terraform fmt` を自動適用し `validate` を検証する
+- **テストは仕様ベースで書く**: 文面フォーマットの詳細・内部実装・具体的な例外型など変わりやすいものに依存させず、入出力の不変条件（データが文面に反映される、ツイートされない等）を検証する。リファクタや文面変更のたびにテストを直さなくて済む状態を保つ（判断基準はskill `spec-based-testing` にまとめてある）
+
+## Claude Code設定（.claude/）
+
+- フック（`.claude/settings.json` で登録）
+  - `hooks/guard-real-run.sh`（PreToolUse・Bash）… ボットを通常モード（実ツイート）でローカル実行するコマンドを拒否する。`--dry-run` / `DRY_RUN=true` 付きは通す
+  - `hooks/terraform-check.sh`（PostToolUse・Edit/Write）… `.tf` ファイルの変更時に `terraform fmt` を自動適用し `validate` を検証する
+- skill（`.claude/skills/`。このリポジトリ固有の内容は含めず、他リポジトリにコピーしてそのまま使える汎用的なものにしている）
+  - `pre-pr-check` … コミット・PR前の最終確認（検証コマンド実行、gitleaks / git-secrets による機密情報スキャン、ドキュメント追随）
+  - `pin-github-actions` … GitHub Actionsの `uses:` をフルcommit SHA + バージョンコメントに固定する（pinactを使う）
+  - `spec-based-testing` … 仕様ベースのテストを書く／見直すための判断基準
 
 ## ドライラン（ツイートせずに文面確認）
 
@@ -43,9 +55,9 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 ## ⚠️ 重要な注意事項
 
 1. **`FunctionTest` のSkipを外したまま一括実行しないこと**: 本番の `Program.Main` を直接実行するため、認証情報がある環境では実ツイートが投稿される。手動の疎通確認専用。
-2. **masterへのマージは本番デプロイ**: `.github/workflows/lambda_deploy.yml` の verify（ビルド+テスト）通過後、Releaseの `dotnet publish` 成果物がLambdaへデプロイされる（`.md`・`.github/`・`.vscode/`・`.gitignore` のみの変更は除く）。masterはbranch protectionで保護されており直pushは拒否される（PR + CIチェック `build-and-test` の通過が必須。管理者にも適用）。
+2. **masterへのマージは本番デプロイ**: `.github/workflows/lambda_deploy.yml` の verify（ビルド+フォーマット検証+テスト）通過後、Releaseの `dotnet publish` 成果物がLambdaへデプロイされる（`.md`・`.github/`・`.claude/`・`.vscode/`・`.gitignore`・`infra/` のみの変更は除く）。masterはbranch protectionで保護されており直pushは拒否される（PR + CIチェック `build-and-test` の通過が必須。管理者にも適用）。
 3. **機密情報・環境固有情報を絶対にgit管理ファイルに入れない**: APIキーは環境変数（`MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECRET`, `ACCESS_KEY`, `ACCESS_SECRET`）でのみ扱う。リージョン・バケット名・アカウントID等の環境固有値もコミットせず、gitignore対象ファイル（`backend.hcl`・`terraform.tfvars` 等）に置く。リポジトリに置くのは、書き換えないと必ずエラーになるダミー値を持つ `.example` のみ。コミット前にはこれらが含まれていないことを確認すること。機械的な防止として **git-secrets** のpre-commitフックを導入している（新しいclone環境では `git secrets --install && git secrets --register-aws` の実行と禁止パターンの再登録が必要。パターン自体が環境固有情報のためローカルのgit configにのみ保存し、コミットしない）。
-4. **GitHub Actionsはcommit SHA固定**: `@v7` のようなタグではなく、フルcommit hash + バージョンコメント（例: `actions/checkout@3d3c42e... # v7.0.1`）で指定する。バージョン更新はDependabot（月次）が担う。
+4. **GitHub Actionsはcommit SHA固定**: `@v7` のようなタグではなく、フルcommit hash + バージョンコメント（例: `actions/checkout@3d3c42e... # v7.0.1`）で指定する（skill `pin-github-actions` を使う）。バージョン更新はDependabot（月次・まとめて1PR）が担う。
 5. **`terraform apply` / `terraform destroy` は必ず人間が実行する**: Claudeが行うのは `plan`・`validate`・`fmt` まで（`.claude/settings.json` のdenyルールでも強制）。適用はレビュー後に人間が `infra/environments/prod` で実行する。
 6. **tfファイルの変更は勝手にコミットしない**: `.tf` を含む `infra/` 配下の変更は、ユーザーがファイル内容を確認し、明示的にコミットの指示を出した時のみコミットする。
 
@@ -59,7 +71,9 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 - **レギュラーシーズンの日程はMLB公式Stats API**（statsapi.mlb.com・認証不要・無料）から取得し、終了日の翌日以降は順位取得もツイートもせず終了する。日程の取得に失敗した場合は、シーズン中でありうる3〜10月はエラーログを出して投稿を続行（ログ監視アラームがメール通知）、明らかにシーズン外の11〜2月はどのみち投稿対象がなく実害ゼロのため警告ログのみで正常終了する（メール通知なし）。シーズン開始前はsportsdata.ioが空の順位を返すため自然に何も投稿されない（2027年の応答が空配列であることを実測確認済み）
 - sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`TeamStanding.IsAllStarPseudoTeam` で判定し `DivisionStanding.FromStandings` で除外している
 - チーム公式ハッシュタグは `HashtagProvider` で一元管理（毎シーズン変わる可能性あり）
-- X APIの連続POSTは503になるため、`TwitterApiSender` が送信後に1秒のインターバルを置いている
+- X APIの連続POSTは503になるため、`TwitterApiSender` が投稿と投稿の間に1秒のインターバルを置いている（最後の1件の後は待たない）
+- **Xの文字数上限280は重み付きカウント**（ラテン文字等は1、CJK文字・絵文字は2。twitter-textの設定に準拠）。`TweetContent.CharacterCount` がこのルールで数える。結合絵文字は安全側に多く数えるため、超過判定でも送信は止めず警告のみ（実際に超過していればX APIが拒否する）
+- 送信先が例外を投げても（タイムアウト等）`BotRunner` はその1件の失敗として続行し、全件失敗の場合のみ `AllTweetsFailedException` でエラー終了する（CloudWatchアラーム → メール通知）
 - OAuth1.0a署名は自前実装（`Authorization/OAuth1.cs`）。タイムスタンプが未来だとX APIに弾かれるため UNIXタイムスタンプ切り捨てを使用
 
 ## 改善計画ドキュメント
