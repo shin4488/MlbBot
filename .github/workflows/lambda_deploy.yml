@@ -8,6 +8,7 @@ on:
       - '.gitignore'
       - '.github/**'
       - '.vscode/**'
+      - '.claude/**'
       # インフラ定義の変更は関数コードに影響しない（適用はterraform applyで行う）
       - 'infra/**'
   # 手動実行。ワークフローのみの変更は.github/**がpaths-ignoreのため自動では走らず、動作確認はこちらを使う
@@ -18,28 +19,26 @@ concurrency:
   group: lambda-deploy
   cancel-in-progress: false
 
+# GITHUB_TOKENの権限は既定で読み取りのみにし、OIDCが必要なdeployジョブだけで広げる
+permissions:
+  contents: read
+
 jobs:
   # ビルド・テストが通らないコードを本番にデプロイしないためのゲート
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Build
-        run: dotnet build MlbBot.sln --configuration Release
-
-      - name: Test
-        run: dotnet test MlbBot.sln --configuration Release --no-build
+      - name: Build, format check and test
+        uses: ./.github/actions/verify-dotnet
 
   deploy:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # OIDCでAWSの一時認証情報を取得するための権限（このジョブのみ。指定すると他の権限は
     # 既定でnoneになるため、checkoutに必要なcontents: readも明示する）
     permissions:
@@ -52,7 +51,7 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Configure AWS credentials
         # 長期アクセスキーではなく、GitHub OIDC + IAMロール（masterブランチ限定・コード更新権限のみ）で認証する
@@ -71,4 +70,6 @@ jobs:
 
       - name: Deploy
         # update-function-codeのレスポンスには関数設定（環境変数名など）が含まれるためログに出力しない
+        # 更新の反映完了は待たない（aws lambda wait function-updated にはGetFunctionConfiguration権限が必要だが、
+        # デプロイ用ロールはUpdateFunctionCodeのみの最小権限にしているため）
         run: aws lambda update-function-code --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} --zip-file fileb://TwitterMlbBotExecution.zip --publish > /dev/null

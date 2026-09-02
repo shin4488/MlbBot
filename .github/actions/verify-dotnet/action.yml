@@ -1,0 +1,34 @@
+name: Verify .NET solution
+description: |
+  .NET SDKのセットアップ → ビルド → フォーマット検証 → テスト を行う共通ステップ。
+  PR検証（ci.yml）と本番デプロイ前のゲート（lambda_deploy.yml）で同じ検証内容を保証するため、
+  ワークフローごとにステップを複製せずここに一元化する。
+  reusable workflow ではなく composite action にしているのは、呼び出し側のジョブ名
+  （branch protectionの必須チェック名 `build-and-test`）を変えないため。
+inputs:
+  solution:
+    description: 対象のソリューションファイル
+    required: false
+    default: MlbBot.sln
+runs:
+  using: composite
+  steps:
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        # SDKバージョンはglobal.jsonを唯一の情報源とする（ワークフロー側にバージョンを重複させない）
+        global-json-file: global.json
+
+    - name: Build
+      shell: bash
+      run: dotnet build ${{ inputs.solution }} --configuration Release
+
+    - name: Format check
+      # .editorconfigとdotnet format既定値への準拠を検証（違反時はローカルで dotnet format を実行して修正）
+      shell: bash
+      run: dotnet format ${{ inputs.solution }} --verify-no-changes --no-restore
+
+    - name: Test
+      # FunctionTestは実ツイートが投稿されるためSkip指定済み（FunctionTest.cs参照）
+      shell: bash
+      run: dotnet test ${{ inputs.solution }} --configuration Release --no-build

@@ -5,9 +5,20 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # masterへのマージは本番デプロイになるため、パッケージごとにPRを分けずまとめて1回のデプロイで済ませる
+    groups:
+      nuget-packages:
+        patterns:
+          - "*"
 
-  # GitHub Actionsのバージョン更新
+  # GitHub Actionsのバージョン更新（ワークフローと composite action の両方を対象にする）
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/verify-dotnet
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
