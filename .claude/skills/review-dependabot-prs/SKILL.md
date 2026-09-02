@@ -52,3 +52,28 @@ open な PR のうち Dependabot が作成したものを列挙し、1件ずつ�
 ### 6. 報告する
 
 処理した PR の一覧（番号・タイトル・判定・一言の理由）、マージ後のデプロイ結果、人の判断を待つ PR をまとめる。実施できなかった確認があれば「未確認」と明記し、確認したように書かない。
+
+## 参考コマンド（gh CLI が使える環境）
+
+判断に関わらない定型操作。GitHub の MCP ツールを使う環境では同等の操作に読み替える。
+
+```bash
+# 1. 対象の列挙
+gh pr list --author app/dependabot --state open --json number,title,headRefName,mergeStateStatus,isDraft
+
+# 2〜3. PR の情報・差分・CI 状況
+gh pr view <N> --json title,body,author,files,commits,headRepository,mergeStateStatus,mergeable,labels
+gh pr diff <N>
+gh pr checks <N>
+gh pr checks <N> --watch                       # rebase 後などに CI の完了を待つ
+gh pr comment <N> --body "@dependabot rebase"  # base に追随させる
+gh run view <run-id> --log | grep -E "Passed!|Failed!|Total tests|passed|failed"   # CI が実行したテスト件数
+
+# 4. レビューコメント
+gh pr comment <N> --body-file <コメントを書いたファイル>
+
+# 5. マージとデプロイ確認
+gh pr merge <N> --merge --delete-branch        # マージ方式はリポジトリの慣例に合わせる
+gh run list --limit 3                           # マージで起動したワークフローを特定する
+gh run watch <run-id> --exit-status
+```
