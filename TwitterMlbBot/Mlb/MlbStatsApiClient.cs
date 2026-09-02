@@ -28,7 +28,7 @@ namespace TwitterMlbBot.Mlb
         public async Task<SeasonCalendar> GetSeasonCalendarAsync(int year)
         {
             string endpoint = string.Format(CultureInfo.InvariantCulture, endpointFormat, year);
-            HttpResponseMessage response = await client.GetAsync(endpoint).ConfigureAwait(false);
+            using HttpResponseMessage response = await client.GetAsync(endpoint).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {

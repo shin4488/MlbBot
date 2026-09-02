@@ -42,7 +42,7 @@ namespace TwitterMlbBot
                 return;
             }
 
-            List<TeamStanding> standings = await this.standingsProvider.GetStandingsAsync(year);
+            IReadOnlyList<TeamStanding> standings = await this.standingsProvider.GetStandingsAsync(year);
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
             List<TweetContent> tweetContentList = new(this.composer.Compose(divisions, date));
 
@@ -64,12 +64,13 @@ namespace TwitterMlbBot
             {
                 if (tweetContent.ExceedsCharacterLimit)
                 {
-                    // Xの実際の判定は重み付きの独自カウントのため、ここでは送信を止めず警告のみ出す
+                    // 文字数はXの重み付きルールで数えているが、絵文字の結合シーケンス等は安全側に多く数えるため、
+                    // 超過と判定しても送信を止めず警告にとどめる（実際に超過していればX APIが拒否し、送信失敗として記録される）
                     this.logger.LogWarning(
                         "文面が上限（{Limit}字）を超えている可能性があります（{Count}字）",
                         TweetContent.CharacterLimit, tweetContent.CharacterCount);
                 }
-                if (await this.tweetSender.SendAsync(tweetContent))
+                if (await this.TrySendAsync(tweetContent))
                 {
                     successCount++;
                 }
@@ -80,6 +81,24 @@ namespace TwitterMlbBot
             {
                 // 一部失敗は重複コンテンツ拒否など正常系でも起きるため、全件失敗のみエラーにする
                 throw new AllTweetsFailedException(tweetContentList.Count);
+            }
+        }
+
+        /// <summary>
+        /// ツイートを1件送信し、成否を返す。
+        /// 送信先が例外を投げた場合（タイムアウト・ネットワーク障害等）も「その1件の失敗」として扱い、
+        /// 残りの地区のツイートまで道連れにしない。全件失敗した場合の扱いは呼び出し側が決める
+        /// </summary>
+        private async Task<bool> TrySendAsync(TweetContent tweetContent)
+        {
+            try
+            {
+                return await this.tweetSender.SendAsync(tweetContent);
+            }
+            catch (Exception exception)
+            {
+                this.logger.LogError(exception, "ツイートの送信中に例外が発生しました。残りのツイートは続行します");
+                return false;
             }
         }
 

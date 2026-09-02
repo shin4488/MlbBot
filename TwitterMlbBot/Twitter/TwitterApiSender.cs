@@ -17,10 +17,11 @@ namespace TwitterMlbBot.Twitter
             // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
             Timeout = TimeSpan.FromSeconds(10),
         };
-        // X APIの503エラー（短時間での連続POSTによる制限）を防ぐための送信後インターバル
+        // X APIは短時間の連続POSTを503で拒否するため、投稿と投稿の間に空ける最低間隔
         private static readonly TimeSpan postInterval = TimeSpan.FromSeconds(1);
         private readonly OAuth1 authorization;
         private readonly ILogger<TwitterApiSender> logger;
+        private bool hasSentBefore;
 
         public TwitterApiSender(OAuth1 authorization, ILogger<TwitterApiSender> logger)
         {
@@ -30,6 +31,14 @@ namespace TwitterMlbBot.Twitter
 
         public async Task<bool> SendAsync(TweetContent tweetContent)
         {
+            if (this.hasSentBefore)
+            {
+                // 間隔は「送信後」ではなく「次の送信前」に空ける。最後の1件の後に待つ必要はなく、
+                // Lambdaの実行時間（課金）を1秒無駄にしないため
+                await Task.Delay(postInterval);
+            }
+            this.hasSentBefore = true;
+
             // 各リクエストごとに新しいタイムスタンプとnonceを含んだOAuth署名を生成する
             string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
             string requestBody = JsonSerializer.Serialize(new { text = tweetContent.Text });
@@ -38,13 +47,12 @@ namespace TwitterMlbBot.Twitter
             request.Headers.Add("Authorization", $"OAuth {authorizationContent}");
             request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
-            var response = await client.SendAsync(request);
+            using HttpResponseMessage response = await client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
                 string responseContent = await response.Content.ReadAsStringAsync();
                 this.logger.LogWarning("Tweet failed: {StatusCode} - {ResponseBody}", response.StatusCode, responseContent);
             }
-            await Task.Delay(postInterval);
             return response.IsSuccessStatusCode;
         }
     }
