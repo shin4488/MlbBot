@@ -16,7 +16,8 @@ flowchart LR
 ```
 
 - `TwitterMlbBot/` … 本体ロジック（OutputType=Exe。ローカル実行は `dotnet run --project TwitterMlbBot -- --dry-run`）
-  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record・All-Star判定）、`DivisionStanding`（順位順を `RankedTeam` として型で保証）、`TweetContent`（280字上限の知識を持つ値オブジェクト）、`SeasonCalendar`（シーズン終了判定）、`RunOptions`（引数解析の純粋関数）
+  - ドメインルールはデータ側に持たせる方針: `TeamStanding`（不変record。勝率の算出・ゲーム差・順位付け規則を持つ）、`DivisionStanding` / `WildCardStanding`（順位順を `RankedTeam` として型で保証）、`TweetContent`（280字上限の知識を持つ値オブジェクト）、`SeasonCalendar`（シーズン終了判定）、`RunOptions`（引数解析の純粋関数）
+- 外部APIの形はクライアント内に閉じ込める: `MlbApiClient` / `MlbStatsApiClient` はレスポンス用のprivate recordで受け、ドメインの型（`TeamStanding` / `SeasonCalendar`）に変換してから渡す。解析部分は `ParseStandings` / `ParseSeasonCalendar` として切り出し、ネットワークなしでテストできる
 - `TwitterMlbBotExecution/src/` … Lambdaハンドラ（`Program.Main(null)` を呼ぶだけの薄いラッパー）
 - `TwitterMlbBotExecution/test/` … Skip指定の手動疎通用テスト（`FunctionTest`）と、純粋ロジック・オーケストレーションの単体テスト（フェイク使用・ネットワーク不要）
 - `infra/` … Terraformによるインフラ管理（使い方・残タスクは [infra/README.md](infra/README.md)）
@@ -69,7 +70,8 @@ dotnet format MlbBot.sln    # コード変更後に実行（CIが --verify-no-ch
 
 - **X APIは従量課金**（投稿 $0.015/件・リンク入りは $0.20/件）。6〜8ツイート/日・シーズン中（3月末〜9月末）のみ投稿で年間約$19。ツイート件数を増やす変更はコスト増を意識すること
 - **レギュラーシーズンの日程はMLB公式Stats API**（statsapi.mlb.com・認証不要・無料）から取得し、終了日の翌日以降は順位取得もツイートもせず終了する。日程の取得に失敗した場合は、シーズン中でありうる3〜10月はエラーログを出して投稿を続行（ログ監視アラームがメール通知）、明らかにシーズン外の11〜2月はどのみち投稿対象がなく実害ゼロのため警告ログのみで正常終了する（メール通知なし）。シーズン開始前はsportsdata.ioが空の順位を返すため自然に何も投稿されない（2027年の応答が空配列であることを実測確認済み）
-- sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`TeamStanding.IsAllStarPseudoTeam` で判定し `DivisionStanding.FromStandings` で除外している
+- sportsdata.io のレスポンスには All-Star 用の擬似チーム（League と Division が同名: "AL"/"AL"）が含まれるため、`MlbApiClient.ParseStandings` がAPI境界で除外し、ドメインには実在チームだけを渡す
+- 勝率はAPIの値（小数3桁丸め）を使わず勝敗から算出し、ゲーム差も勝敗から計算する（地区順位は首位基準、ワイルドカードはプレーオフ圏ボーダー基準。定義は `TeamStanding.GamesBehind`）
 - チーム公式ハッシュタグは `HashtagProvider` で一元管理（毎シーズン変わる可能性あり）
 - X APIの連続POSTは503になるため、`TwitterApiSender` が投稿と投稿の間に1秒のインターバルを置いている（最後の1件の後は待たない）
 - **Xの文字数上限280は重み付きカウント**（ラテン文字等は1、CJK文字・絵文字は2。twitter-textの設定に準拠）。`TweetContent.CharacterCount` がこのルールで数える。結合絵文字は安全側に多く数えるため、超過判定でも送信は止めず警告のみ（実際に超過していればX APIが拒否する）
