@@ -16,21 +16,6 @@ public class TweetComposerTest
 {
     private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
 
-    private static TeamStanding CreateTeam(
-        string league, string division, string name, int wins, int losses, double percentage, float? gamesBehind = 0)
-    {
-        return new TeamStanding
-        {
-            League = league,
-            Division = division,
-            Name = name,
-            Wins = wins,
-            Losses = losses,
-            Percentage = percentage,
-            GamesBehind = gamesBehind,
-        };
-    }
-
     private static IReadOnlyList<TweetContent> Compose(List<TeamStanding> standings)
     {
         return new TweetComposer(new HashtagProvider())
@@ -42,7 +27,7 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
@@ -56,9 +41,9 @@ public class TweetComposerTest
         // 入力はあえて順位順に並べない（APIの並び順に依存しない仕様の検証）
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500),
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
-            CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
+            Teams.Create("AL", "Central", "Astros", 70, 70),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
+            Teams.Create("AL", "Central", "Athletics", 56, 84),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
@@ -72,7 +57,7 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
@@ -85,7 +70,7 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
@@ -98,13 +83,13 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600, gamesBehind: 0),
-            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500, gamesBehind: 14.5f),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
+            Teams.Create("AL", "Central", "Astros", 70, 71),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
 
-        // 2位のゲーム差は表示される
+        // 2位のゲーム差（首位の貯金28、2位の貯金-1 → 14.5）は表示される
         Assert.Contains("(14.5)", text);
         // 首位の行にはゲーム差を表示しない（"(0)" が現れない）
         Assert.DoesNotContain("(0)", text);
@@ -115,10 +100,10 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
-            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500),
-            CreateTeam("NL", "West", "Dodgers", 82, 48, 0.630),
-            CreateTeam("NL", "West", "Rockies", 60, 70, 0.460),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
+            Teams.Create("AL", "Central", "Astros", 70, 70),
+            Teams.Create("NL", "West", "Dodgers", 82, 48),
+            Teams.Create("NL", "West", "Rockies", 60, 70),
         };
 
         var tweets = Compose(standings);
@@ -139,9 +124,9 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 84, 56, 0.600),
-            CreateTeam("AL", "Central", "Astros", 70, 70, 0.500),
-            CreateTeam("AL", "Central", "Athletics", 56, 84, 0.400),
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
+            Teams.Create("AL", "Central", "Astros", 70, 70),
+            Teams.Create("AL", "Central", "Athletics", 56, 84),
         };
 
         string text = Assert.Single(Compose(standings)).Text;
@@ -185,9 +170,9 @@ public class TweetComposerTest
         // 圏外チームがいない（データ欠け等で対象チームが少ない）場合に無意味な区切り線を出さない
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 95, 45, 0.679),
-            CreateTeam("AL", "Central", "Astros", 88, 52, 0.629),
-            CreateTeam("AL", "Central", "Dodgers", 87, 53, 0.621),
+            Teams.Create("AL", "Central", "White Sox", 95, 45),
+            Teams.Create("AL", "Central", "Astros", 88, 52),
+            Teams.Create("AL", "Central", "Dodgers", 87, 53),
         };
         var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
 
@@ -213,14 +198,14 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            CreateTeam("AL", "Central", "White Sox", 95, 45, 0.679),
-            CreateTeam("AL", "Central", "Astros", 88, 52, 0.629),
-            CreateTeam("AL", "Central", "Dodgers", 87, 53, 0.621),
-            CreateTeam("AL", "Central", "Rockies", 86, 54, 0.614),
-            CreateTeam("AL", "Central", "Cubs", 85, 55, 0.607),
-            CreateTeam("AL", "Central", "Angels", 82, 58, 0.586),
-            CreateTeam("AL", "Central", "Athletics", 80, 60, 0.571),
-            CreateTeam("AL", "Central", "Mets", 78, 62, 0.557),
+            Teams.Create("AL", "Central", "White Sox", 95, 45),
+            Teams.Create("AL", "Central", "Astros", 88, 52),
+            Teams.Create("AL", "Central", "Dodgers", 87, 53),
+            Teams.Create("AL", "Central", "Rockies", 86, 54),
+            Teams.Create("AL", "Central", "Cubs", 85, 55),
+            Teams.Create("AL", "Central", "Angels", 82, 58),
+            Teams.Create("AL", "Central", "Athletics", 80, 60),
+            Teams.Create("AL", "Central", "Mets", 78, 62),
         };
         var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
         return Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
@@ -232,14 +217,15 @@ public class TweetComposerTest
         // 実在の公式タグマップを意図的に使う数少ないテスト:
         // 「長いチーム名 + 長い公式タグ」の組み合わせが上限を超えないことの回帰検証で、
         // タグマップの変更（毎シーズンありうる）で文字数超過が起きたらここで検出する
+        // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数・2桁小数のゲーム差）にする
         var standings = new List<TeamStanding>
         {
-            CreateTeam("NL", "West", "Diamondbacks", 100, 62, 0.617),
-            CreateTeam("NL", "West", "Blue Jays", 99, 63, 0.611),
-            CreateTeam("NL", "West", "Guardians", 98, 64, 0.605),
-            CreateTeam("NL", "West", "Nationals", 97, 65, 0.599),
-            CreateTeam("NL", "West", "Twins", 96, 66, 0.593),
-        }.Select(team => team with { GamesBehind = 10.5f }).ToList();
+            Teams.Create("NL", "West", "Diamondbacks", 100, 62),
+            Teams.Create("NL", "West", "Blue Jays", 89, 74),
+            Teams.Create("NL", "West", "Guardians", 88, 75),
+            Teams.Create("NL", "West", "Nationals", 87, 76),
+            Teams.Create("NL", "West", "Twins", 86, 77),
+        };
 
         var tweet = Assert.Single(Compose(standings));
 

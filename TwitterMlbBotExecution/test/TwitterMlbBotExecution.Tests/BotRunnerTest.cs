@@ -70,10 +70,10 @@ public class BotRunnerTest
     {
         return new List<TeamStanding>
         {
-            new TeamStanding { League = "AL", Division = "Central", Name = "White Sox", Wins = 84, Losses = 56, Percentage = 0.600 },
-            new TeamStanding { League = "AL", Division = "Central", Name = "Astros", Wins = 70, Losses = 70, Percentage = 0.500 },
-            new TeamStanding { League = "NL", Division = "West", Name = "Dodgers", Wins = 82, Losses = 48, Percentage = 0.630 },
-            new TeamStanding { League = "NL", Division = "West", Name = "Rockies", Wins = 60, Losses = 70, Percentage = 0.460 },
+            Teams.Create("AL", "Central", "White Sox", 84, 56),
+            Teams.Create("AL", "Central", "Astros", 70, 70),
+            Teams.Create("NL", "West", "Dodgers", 82, 48),
+            Teams.Create("NL", "West", "Rockies", 60, 70),
         };
     }
 
@@ -234,7 +234,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender();
         var standings = new List<TeamStanding>
         {
-            new TeamStanding { League = "AL", Division = "Central", Name = new string('A', 300), Wins = 84, Losses = 56, Percentage = 0.600 },
+            Teams.Create("AL", "Central", new string('A', 300), 84, 56),
         };
 
         await CreateRunner(standings, sender).RunAsync(2026, julyDate);
