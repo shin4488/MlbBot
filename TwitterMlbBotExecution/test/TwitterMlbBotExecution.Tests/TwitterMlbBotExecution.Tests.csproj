@@ -5,7 +5,7 @@
     <PackageReference Include="Amazon.Lambda.TestUtilities" Version="4.2.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- Amazon.Lambda.Core はこの参照経由で推移的に入るため、個別に参照しない（バージョンの二重管理を避ける） -->
