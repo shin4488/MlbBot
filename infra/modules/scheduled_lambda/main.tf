@@ -28,9 +28,26 @@ resource "aws_iam_role_policy_attachment" "this" {
   policy_arn = each.value
 }
 
+# AWSLambdaBasicExecutionRoleは全ロググループに書き込めるため、専用グループだけに許可する。
+# グループ作成・保持期間の変更はTerraformが担当し、Lambdaには与えない。
+resource "aws_iam_role_policy" "logs" {
+  name = "write-function-logs"
+  role = aws_iam_role.this.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.this.arn}:*"
+    }]
+  })
+}
+
 # ---- Lambda ----
 
 resource "aws_lambda_function" "this" {
+  # ロールの参照だけではログ権限の付与を待たないため、権限の設定後に関数を作成・更新する。
+  depends_on    = [aws_iam_role_policy.logs]
   function_name = var.function_name
   role          = aws_iam_role.this.arn
   runtime       = var.runtime
@@ -40,7 +57,7 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout
 
   # aws_lambda_functionはコード指定（filename/s3_bucket/image_uri）が構文上必須のため、
-  # 存在し得ないS3参照をダミーとして与える。ignore_changesによりデプロイには一切使われず、
+  # 存在し得ないS3参照をダミーとして与える。既存関数の更新ではignore_changesにより無視され、
   # 万一関数を再作成しようとした場合も必ず失敗して止まる（安全側に倒れる）。
   # バケット名はS3の上限63文字を超えているため、第三者がこの名前のバケットを作ることも不可能
   s3_bucket = "terraform-placeholder-never-used-this-name-exceeds-the-s3-63-character-limit-so-it-cannot-exist"
@@ -56,6 +73,16 @@ resource "aws_lambda_function" "this" {
       environment,
     ]
   }
+}
+
+# ---- 非同期実行 ----
+
+# 投稿が成功しても通信障害で応答を受け取れない場合に備え、重複投稿を避ける。
+# そのため、関数エラーによる全体の自動再実行は既定で行わない。
+# Lambdaの重複配信全般を防ぐものではなく、実行ごとの冪等性はアプリ側で別途考慮する。
+resource "aws_lambda_function_event_invoke_config" "this" {
+  function_name          = aws_lambda_function.this.function_name
+  maximum_retry_attempts = var.maximum_retry_attempts
 }
 
 # ---- CloudWatch Logs ----

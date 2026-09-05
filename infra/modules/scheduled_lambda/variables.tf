@@ -29,6 +29,16 @@ variable "timeout" {
   type        = number
 }
 
+variable "maximum_retry_attempts" {
+  description = "関数エラー時の非同期再試行回数。副作用のある定期処理では再実行を避ける"
+  type        = number
+  default     = 0
+  validation {
+    condition     = contains([0, 1, 2], var.maximum_retry_attempts)
+    error_message = "非同期再試行回数は0・1・2のいずれかを指定してください。"
+  }
+}
+
 variable "role_name" {
   description = "Lambda実行ロール名"
   type        = string

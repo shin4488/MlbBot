@@ -30,6 +30,14 @@ resource "aws_iam_user_policy" "terraform_iam_bootstrap" {
         Resource = module.deploy_role.oidc_provider_arn
       },
       {
+        # 信頼先のARNはplan中に取得するため、IAMユーザーで直接実行する場合も自身の情報を読めるようにする。
+        # 初回はこの権限を持つ管理者による付与、またはTerraform用ロールでの実行が必要。
+        Sid      = "ReadTerraformUser"
+        Effect   = "Allow"
+        Action   = ["iam:GetUser"]
+        Resource = local.terraform_user_arn
+      },
+      {
         Sid      = "SelfUserPolicy"
         Effect   = "Allow"
         Action   = ["iam:PutUserPolicy", "iam:GetUserPolicy", "iam:ListUserPolicies", "iam:DeleteUserPolicy"]
@@ -82,7 +90,7 @@ module "terraform_role" {
       {
         Sid      = "LambdaConfig"
         Effect   = "Allow"
-        Action   = ["lambda:Get*", "lambda:List*", "lambda:UpdateFunctionConfiguration", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource"]
+        Action   = ["lambda:Get*", "lambda:List*", "lambda:UpdateFunctionConfiguration", "lambda:PutFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource"]
         Resource = module.twitter_mlb_bot.function_arn
       },
       {
@@ -92,39 +100,66 @@ module "terraform_role" {
         Resource = module.twitter_mlb_bot.event_rule_arn
       },
       {
-        Sid      = "Logs"
-        Effect   = "Allow"
-        Action   = ["logs:Describe*", "logs:List*", "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:PutMetricFilter", "logs:DeleteMetricFilter", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
-        Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}*"
-      },
-      {
-        # 一覧・参照系のアクションはIAM仕様上リソースを絞れないため"*"とする
-        Sid      = "MonitoringRead"
-        Effect   = "Allow"
-        Action   = ["sns:GetTopicAttributes", "sns:GetSubscriptionAttributes", "sns:ListTagsForResource", "sns:ListTopics", "sns:ListSubscriptions", "sns:ListSubscriptionsByTopic", "cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
-        Resource = "*"
-      },
-      {
-        # 変更系は自分たちのトピック・アラームに限定する（sns末尾の*はサブスクリプションARNを含めるため）
-        Sid    = "MonitoringWrite"
+        Sid    = "Logs"
         Effect = "Allow"
-        Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:Subscribe", "sns:Unsubscribe", "sns:SetTopicAttributes", "sns:TagResource", "sns:UntagResource", "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
+        Action = ["logs:DescribeMetricFilters", "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:PutMetricFilter", "logs:DeleteMetricFilter", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
+        # タグ操作は末尾なし、その他の操作は :* 付きのARNが必要。名前直後の * で別グループまで許可しない。
         Resource = [
-          "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.alert_topic_name}*",
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}",
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}:*",
+        ]
+      },
+      {
+        # 参照系でも個別リソースに絞れるものは限定する。
+        Sid    = "MonitoringRead"
+        Effect = "Allow"
+        Action = ["sns:GetTopicAttributes", "sns:GetSubscriptionAttributes", "sns:ListTagsForResource", "sns:ListSubscriptionsByTopic", "cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"]
+        Resource = [
+          "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.alert_topic_name}",
           "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.alert_alarm_name}",
           "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.error_log_alarm_name}",
         ]
       },
       {
+        # これらの一覧APIにはリソース単位の制限がない。
+        Sid      = "ResourceDiscovery"
+        Effect   = "Allow"
+        Action   = ["sns:ListTopics", "sns:ListSubscriptions", "logs:DescribeLogGroups"]
+        Resource = "*"
+      },
+      {
+        # SNSの購読操作もIAMではトピックで制限する。同じ接頭辞の別トピックまで許可しない。
+        Sid    = "MonitoringWrite"
+        Effect = "Allow"
+        Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:Subscribe", "sns:Unsubscribe", "sns:SetTopicAttributes", "sns:TagResource", "sns:UntagResource", "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
+        Resource = [
+          "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.alert_topic_name}",
+          "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.alert_alarm_name}",
+          "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.error_log_alarm_name}",
+        ]
+      },
+      {
+        # 自身の権限もTerraformで管理するため、このロールは自分の許可範囲を変更できる。
+        # 権限の上限を強制する場合は、別の管理者が管理する権限境界などが必要になる。
         Sid    = "IamManagedByTerraform"
         Effect = "Allow"
-        Action = ["iam:Get*", "iam:List*", "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:PassRole", "iam:PutUserPolicy", "iam:DeleteUserPolicy"]
+        Action = ["iam:Get*", "iam:List*", "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:PutUserPolicy", "iam:DeleteUserPolicy"]
         Resource = [
           local.terraform_role_arn,
           module.deploy_role.role_arn,
           module.twitter_mlb_bot.role_arn,
           "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/${var.terraform_user_name}",
         ]
+      },
+      {
+        # 設定変更時にLambdaへ渡すのは実行ロールだけ。Terraform自身やデプロイ用ロールは渡さない。
+        Sid      = "PassLambdaExecutionRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = module.twitter_mlb_bot.role_arn
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "lambda.amazonaws.com" }
+        }
       },
       {
         Sid      = "OidcProvider"
