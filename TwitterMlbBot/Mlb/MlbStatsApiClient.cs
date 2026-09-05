@@ -25,14 +25,15 @@ namespace TwitterMlbBot.Mlb
         public async Task<SeasonCalendar> GetSeasonCalendarAsync(int year)
         {
             string endpoint = string.Format(CultureInfo.InvariantCulture, endpointFormat, year);
+            // 通信後はデータ変換とログ出力だけなので、各awaitで呼び出し元の同期コンテキストに戻る必要はない。
             using HttpResponseMessage response = await client.GetAsync(endpoint).ConfigureAwait(false);
-            string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 // クライアントは取得失敗だけを伝える。投稿続行や通知の判断は実行側の方針に委ねる
-                throw new MlbApiException($"{year}年のシーズン日程", response.StatusCode, responseBody);
+                throw new MlbApiException($"{year}年のシーズン日程", response.StatusCode);
             }
 
+            string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             SeasonCalendar calendar = ParseSeasonCalendar(responseBody, year);
             logger.LogInformation(
                 "Season calendar fetched: {Year} regular season ends {EndDate}", year, calendar.RegularSeasonEndDate);
@@ -52,9 +53,10 @@ namespace TwitterMlbBot.Mlb
                 SeasonResponse season = parsed.GetSeason(year);
                 return season.ToSeasonCalendar(year);
             }
-            catch (JsonException exception)
+            catch (JsonException)
             {
-                throw new InvalidOperationException($"MLB公式の{year}年の日程情報を読み取れないため、シーズン終了を判断できません。", exception);
+                // 解析エラーの詳細に応答本文が混ざるため、外へ渡すのは業務上の影響だけにする。
+                throw new InvalidOperationException($"MLB公式の{year}年の日程情報を読み取れないため、シーズン終了を判断できません。");
             }
         }
 

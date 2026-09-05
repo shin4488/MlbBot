@@ -13,11 +13,7 @@ namespace TwitterMlbBot
     {
         // Lambdaのウォーム起動でも接続プールを再利用する。通信の寿命・設定はここだけで管理し、
         // 各クライアントは注入された接続を借りる（破棄しない）。認証情報は各リクエストだけに付ける
-        private static readonly HttpClient httpClient = new()
-        {
-            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
-            Timeout = TimeSpan.FromSeconds(10),
-        };
+        private static readonly HttpClient httpClient = ApiHttpClientFactory.Create();
 
         /// <summary>
         /// エントリーポイント
