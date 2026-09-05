@@ -30,7 +30,7 @@ namespace TwitterMlbBot.Mlb
         {
             using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, endpoint + year);
             // APIキーはURIに含めずヘッダーで渡す（URIがログや例外メッセージに出てもキーが漏れないようにする）
-            request.Headers.Add("Ocp-Apim-Subscription-Key", this.apiKey);
+            request.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
 
             using HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -41,7 +41,7 @@ namespace TwitterMlbBot.Mlb
 
             IReadOnlyList<TeamStanding> standings = ParseStandings(responseBody);
             // レスポンス全文はログに出さず、運用確認に必要な件数のみ出力する
-            this.logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", standings.Count, year);
+            logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", standings.Count, year);
             return standings;
         }
 

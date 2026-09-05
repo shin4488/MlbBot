@@ -131,7 +131,7 @@ namespace TwitterMlbBot.Composing
             buffer.Append("#MLB");
             foreach (TeamStanding team in topTeams)
             {
-                buffer.Append(' ').Append(this.hashtagProvider.GetHashtags(team.Name));
+                buffer.Append(' ').Append(hashtagProvider.GetHashtags(team.Name));
             }
         }
     }

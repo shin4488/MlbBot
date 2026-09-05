@@ -71,7 +71,7 @@ namespace TwitterMlbBot.Composing
         {
             // ハッシュタグに空白は使えないため除去する（"Red Sox" → "RedSox"）
             string nameNoSpace = teamName.Replace(" ", "");
-            return this.officialHashtagMap.TryGetValue(teamName, out string? officialTag)
+            return officialHashtagMap.TryGetValue(teamName, out string? officialTag)
                     && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase)
                 // 公式タグ + 元チーム名タグの両方を付ける
                 ? $"#{officialTag} #{nameNoSpace}"

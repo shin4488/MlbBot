@@ -31,16 +31,16 @@ namespace TwitterMlbBot.Twitter
 
         public async Task<bool> SendAsync(TweetContent tweetContent)
         {
-            if (this.hasSentBefore)
+            if (hasSentBefore)
             {
                 // 間隔は「送信後」ではなく「次の送信前」に空ける。最後の1件の後に待つ必要はなく、
                 // Lambdaの実行時間（課金）を1秒無駄にしないため
                 await Task.Delay(postInterval);
             }
-            this.hasSentBefore = true;
+            hasSentBefore = true;
 
             // 各リクエストごとに新しいタイムスタンプとnonceを含んだOAuth署名を生成する
-            string authorizationContent = this.authorization.CreateAuthorizationData(twitterEndpoint);
+            string authorizationContent = authorization.CreateAuthorizationData(twitterEndpoint);
             string requestBody = JsonSerializer.Serialize(new { text = tweetContent.Text });
             using var request = new HttpRequestMessage(HttpMethod.Post, twitterEndpoint);
             request.Headers.ExpectContinue = false; // X API側の503対策として `Expect: 100-continue` を無効化
@@ -51,7 +51,7 @@ namespace TwitterMlbBot.Twitter
             if (!response.IsSuccessStatusCode)
             {
                 string responseContent = await response.Content.ReadAsStringAsync();
-                this.logger.LogWarning("Tweet failed: {StatusCode} - {ResponseBody}", response.StatusCode, responseContent);
+                logger.LogWarning("Tweet failed: {StatusCode} - {ResponseBody}", response.StatusCode, responseContent);
             }
             return response.IsSuccessStatusCode;
         }

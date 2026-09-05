@@ -37,7 +37,7 @@ namespace TwitterMlbBot.Mlb
             }
 
             SeasonCalendar calendar = ParseSeasonCalendar(responseBody, year);
-            this.logger.LogInformation(
+            logger.LogInformation(
                 "Season calendar fetched: {Year} regular season ends {EndDate}", year, calendar.RegularSeasonEndDate);
             return calendar;
         }

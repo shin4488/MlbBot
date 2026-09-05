@@ -11,7 +11,7 @@ namespace TwitterMlbBot.Mlb
         /// </summary>
         public bool IsFinished(DateOnly gameDate)
         {
-            return gameDate > this.RegularSeasonEndDate;
+            return gameDate > RegularSeasonEndDate;
         }
 
         // MLBのレギュラーシーズンが行われうる期間（開幕は最も早くて3月、最終戦は最も遅くて10月）
