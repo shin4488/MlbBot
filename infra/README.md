@@ -60,6 +60,10 @@ terraform apply    # インフラ設定を変更するとき
 terraform fmt -recursive && terraform validate   # コミット前
 ```
 
+各モジュールの `tests/` で、ロールを利用できるユーザー・Lambdaのログ権限・再試行設定を検証できます。
+モジュールを `terraform init -backend=false` で準備してから `terraform test` で実行します。
+テストはproviderをすべてモック化し、planだけで判定します。AWSの認証情報や本番stateは使いません。
+
 ## state（⚠️ 重要）
 
 - stateは**S3バックエンド**で管理（非公開・暗号化・バージョニング設定済みのバケット）。接続情報は環境固有のためgitignore対象の `backend.hcl` で渡す（雛形: [backend.hcl.example](environments/prod/backend.hcl.example)）
@@ -69,6 +73,9 @@ terraform fmt -recursive && terraform validate   # コミット前
 
 - アラームのメール通知は、SNS購読の確認メールを承認するまで有効にならない（購読を作り直した場合も同様）
 - デプロイはOIDC認証（GitHub Secretsの `AWS_DEPLOY_ROLE_ARN` でロール指定）。ロールの信頼はmasterブランチ限定のため、他ブランチからの `workflow_dispatch` は認証段階で拒否される
+- Terraform用ロールの引き受け元は指定IAMユーザーのARNに限定する。Lambdaへの `PassRole` は実行ロールだけにし、ログ書き込みも専用ロググループに限定する
+- Lambdaの関数エラー時の再試行は無効にする。応答喪失時の再投稿を避けるための設定であり、AWS側の重複配信全般を防ぐものではない
+- Terraformの実行主体はIAMポリシー自体を編集するため、引き続き管理者相当の扱いが必要。今回の限定は、自己ポリシーの書き換えまで防ぐ権限境界ではない。厳密な上限が必要なら、別の管理主体によるpermissions boundaryやSCPの設計・適用が必要になる
 - Terraform実行用ロールを使う場合は `~/.aws/config` にAssumeRoleプロファイルを追加する（ロールARNは環境固有情報のためここには書かない。AWSコンソールで確認する）
 
 ## 次の対応候補

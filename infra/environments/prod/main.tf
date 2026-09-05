@@ -5,13 +5,13 @@ module "twitter_mlb_bot" {
   runtime       = "dotnet10"
   handler       = "TwitterMlbBotExecution::TwitterMlbBotExecution.Function::FunctionHandlerAsync"
   memory_size   = 512
-  # 8ツイート/日（送信間に1秒のインターバル）と、将来のリトライ導入に耐える実行時間を確保する
-  timeout = 60
+  # API待ち時間と投稿間隔を含む実行時間を確保する。関数エラー時には自動再投稿しない。
+  timeout                = 60
+  maximum_retry_attempts = 0
 
   role_name        = "SuLambdaRole"
   role_description = "Allows Lambda functions to call AWS services on your behalf."
-  # 最小権限: このボットが必要とするAWS権限はCloudWatch Logsへのログ書き込みのみ
-  policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+  # ログ書き込みはモジュール内で専用グループに限定。広域のAWS管理ポリシーは付けない。
 
   # 毎日06:00 UTC（15:00 JST）に実行
   schedule_expression = "cron(0 6 * * ? *)"

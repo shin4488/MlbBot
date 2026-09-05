@@ -3,12 +3,17 @@
 
 data "aws_caller_identity" "current" {}
 
+data "aws_iam_user" "trusted" {
+  for_each  = toset(var.trusted_user_names)
+  user_name = each.value
+}
+
 resource "aws_iam_role" "this" {
   name        = var.role_name
   description = var.role_description
 
-  # 信頼ポリシーは同一アカウントに開き、実際に誰が引き受けられるかは
-  # 各ユーザー側のsts:AssumeRole権限（下のaws_iam_user_policy）で制御する
+  # アカウント全体への信頼だけでは、別のユーザー・ロールの広いsts:AssumeRole権限でも入れてしまう。
+  # 引き受け元のARNも限定する。IAMパスを持つユーザーでも正しいARNになるよう実体を参照する。
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -16,6 +21,11 @@ resource "aws_iam_role" "this" {
         Effect    = "Allow"
         Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
         Action    = "sts:AssumeRole"
+        Condition = {
+          ArnEquals = {
+            "aws:PrincipalArn" = [for user in data.aws_iam_user.trusted : user.arn]
+          }
+        }
       }
     ]
   })
