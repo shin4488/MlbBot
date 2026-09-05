@@ -205,13 +205,13 @@ Gemini CLIでこの開発ガイドを読み込むには、`settings.json` の `c
 | `.agents/skills` | `../.claude/skills` |
 | `.codex/hooks` | `../.claude/hooks` |
 
-フックの登録は Claude Code の `.claude/settings.json` と Codex の `.codex/hooks.json` で別々に管理する。Codex の有効化設定は `.codex/config.toml` に置く。初回の信頼設定、入力の互換処理、依存ツール、検証方法は [.claude/hooks/README.md](.claude/hooks/README.md) を参照。
+フックの登録は Claude Code の `.claude/settings.json` と Codex の `.codex/hooks.json` で別々に管理する。Codex は `.codex/config.toml` で有効にし、このリポジトリを信頼した上で CLI の `/hooks` から定義を確認・承認する。登録コマンドを変更した後も再確認する（[公式手順](https://learn.chatgpt.com/docs/hooks)）。共有フックにはホストの Bash・jq・realpath・Terraform が必要。
 フックのパスはClaude Codeでは `CLAUDE_PROJECT_DIR`、Codexでは `git rev-parse --show-toplevel` で解決する。ユーザー固有の絶対パスは書かない。
 Claude Code では Terraform の適用・破棄を `.claude/settings.json` の deny ルールでも禁止している。この permissions 設定は Codex に引き継がれない。両エージェントとも、このガイドの「適用・破棄は人間が行う」という指示に従う。
 
 | 共通フック（`.claude/hooks/`） | 処理 |
 | --- | --- |
-| `guard-real-run.sh` | Bash実行前（PreToolUse）に通常モードのローカル実行を拒否する。単独の `dotnet run --project TwitterMlbBot -- --dry-run`、またはコマンド先頭の `DRY_RUN=true` 指定は許可する。複合コマンドは起動部分を分ける |
+| `guard-real-run.sh` | Bash実行前（PreToolUse）に通常モードのローカル実行を拒否する。単独・引用なしの `dotnet run --project TwitterMlbBot -- --dry-run`、またはコマンド先頭の `DRY_RUN=true` 指定を許可する。環境変数の上書きオプションを使う場合は `-- --dry-run` も必要。複合コマンドや引用・展開を使う起動は単純な表記に直す |
 | `terraform-check.sh` | Edit/Write後（PostToolUse）に `.tf` の変更を確認し、`terraform fmt` と `validate` を行う |
 
 共通skillは `.claude/skills/` に置く。他のリポジトリでもそのまま使える内容にし、このリポジトリ固有の指示は含めない。基本のfrontmatterとMarkdownを使い、特定エージェントのツール名・専用設定・フックがないと実行できない手順にしない。
