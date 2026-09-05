@@ -71,7 +71,7 @@ namespace TwitterMlbBot.Mlb
             /// All-Star用の擬似チーム（"AL All-Stars" 等）かどうか。
             /// レスポンスには実在の30球団に加えてこの擬似チームが混ざっており、リーグ名と地区名が同一（"AL"/"AL"）になるのが特徴
             /// </summary>
-            public bool IsAllStarPseudoTeam => League == Division;
+            public bool IsAllStarPseudoTeam => League is "AL" or "NL" && League == Division;
         }
     }
 }

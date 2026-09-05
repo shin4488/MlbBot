@@ -26,7 +26,8 @@ namespace TwitterMlbBot.Mlb
         private WildCardStanding(string league, IReadOnlyList<RankedTeam> rankedTeams)
         {
             League = league;
-            RankedTeams = rankedTeams;
+            // IReadOnlyListだけでは元のListへのキャストで順位を変更できるため、外に渡す時点で変更を禁止する
+            RankedTeams = rankedTeams.ToList().AsReadOnly();
         }
 
         /// <summary>
@@ -38,17 +39,17 @@ namespace TwitterMlbBot.Mlb
                 .GroupBy(division => division.League)
                 .Select(league =>
                 {
-                    List<TeamStanding> contenders = TeamStanding.OrderByRank(league
+                    IReadOnlyList<TeamStanding> contenders = TeamStanding.OrderByRank(league
                         .SelectMany(division => division.RankedTeams)
                         // 地区首位はワイルドカード争いの対象外（地区優勝枠でプレーオフに進む）
                         .Where(ranked => ranked.Rank > 1)
-                        .Select(ranked => ranked.Team))
-                        .ToList();
+                        .Select(ranked => ranked.Team));
 
                     // ゲーム差はプレーオフ圏ボーダー（最終枠のチーム）を基準に計算する。
                     // 圏内チームの値は負になるが、表示側が圏外のみ表示するため問題にしない。
                     // 対象チームがボーダーの位置まで存在しない場合（データ欠け等）はゲーム差を0とする
-                    TeamStanding? playoffLine = contenders.Count >= PlayoffSpots ? contenders[PlayoffSpots - 1] : null;
+                    bool hasPlayoffBorderTeam = contenders.Count >= PlayoffSpots;
+                    TeamStanding? playoffLine = hasPlayoffBorderTeam ? contenders[PlayoffSpots - 1] : null;
                     List<RankedTeam> rankedTeams = contenders
                         .Select((team, index) => new RankedTeam(
                             index + 1, team, playoffLine == null ? 0 : team.GamesBehind(playoffLine)))
@@ -56,7 +57,7 @@ namespace TwitterMlbBot.Mlb
                     return new WildCardStanding(league.Key, rankedTeams);
                 })
                 .Where(wildCard => wildCard.RankedTeams.Count > 0)
-                .ToList();
+                .ToList().AsReadOnly();
         }
 
         // ワイルドカード順位に情報価値が出るのはプレーオフ争いが本格化する8月以降

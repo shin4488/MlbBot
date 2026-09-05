@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace TwitterMlbBot.Composing
 {
     /// <summary>
@@ -45,7 +47,7 @@ namespace TwitterMlbBot.Composing
                 { "Rangers",      "AllForTX" },
                 { "Blue Jays",    "BlueJays50" },
                 { "Nationals",    "Natitude" },
-            };
+            }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
         private readonly IReadOnlyDictionary<string, string> officialHashtagMap;
 
@@ -54,11 +56,13 @@ namespace TwitterMlbBot.Composing
         }
 
         /// <summary>
-        /// テスト用にタグマップを差し替えられるコンストラクタ
+        /// タグマップを受け取り、このインスタンスで使う対応表を確定する
         /// </summary>
         internal HashtagProvider(IReadOnlyDictionary<string, string> officialHashtagMap)
         {
-            this.officialHashtagMap = officialHashtagMap;
+            // IReadOnlyDictionaryでも呼び出し側の辞書は変更できるため、不変のスナップショットを持つ。
+            // 公式マップも不変なので、共有しても別の実行のタグが書き換わることはない
+            this.officialHashtagMap = officialHashtagMap.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -71,8 +75,9 @@ namespace TwitterMlbBot.Composing
         {
             // ハッシュタグに空白は使えないため除去する（"Red Sox" → "RedSox"）
             string nameNoSpace = teamName.Replace(" ", "");
-            return officialHashtagMap.TryGetValue(teamName, out string? officialTag)
-                    && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase)
+            bool shouldAddOfficialTag = officialHashtagMap.TryGetValue(teamName, out string? officialTag)
+                && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase);
+            return shouldAddOfficialTag
                 // 公式タグ + 元チーム名タグの両方を付ける
                 ? $"#{officialTag} #{nameNoSpace}"
                 // 公式タグがチーム名と同じ場合（およびマップ未定義の場合）はチーム名タグのみ使用

@@ -5,13 +5,43 @@ namespace TwitterMlbBot.Mlb
     /// 勝率・ゲーム差・順位付けといった「成績から導かれるルール」はすべてここに置き、
     /// 順位表（DivisionStanding / WildCardStanding）はこのルールを組み合わせるだけにする
     /// </summary>
-    /// <param name="Name">チーム名（例: "Yankees"）</param>
-    /// <param name="League">リーグ名（"AL" / "NL"）</param>
-    /// <param name="Division">地区名（"East" / "Central" / "West"）</param>
-    /// <param name="Wins">勝ち数</param>
-    /// <param name="Losses">負け数</param>
-    internal record TeamStanding(string Name, string League, string Division, int Wins, int Losses)
+    internal record TeamStanding
     {
+        public string Name { get; }
+        public string League { get; }
+        public string Division { get; }
+        public int Wins { get; }
+        public int Losses { get; }
+
+        /// <summary>
+        /// 順位付けに使える成績を作る。作成後に勝敗などを書き換え、検証を迂回することはできない
+        /// </summary>
+        /// <param name="name">チーム名（例: "Yankees"）</param>
+        /// <param name="league">リーグ名（"AL" / "NL"）</param>
+        /// <param name="division">地区名（"East" / "Central" / "West"）</param>
+        /// <param name="wins">勝ち数</param>
+        /// <param name="losses">負け数</param>
+        public TeamStanding(string name, string league, string division, int wins, int losses)
+        {
+            bool hasTeamIdentity = !string.IsNullOrWhiteSpace(name)
+                && !string.IsNullOrWhiteSpace(league)
+                && !string.IsNullOrWhiteSpace(division);
+            bool hasValidWinLossRecord = wins >= 0 && losses >= 0;
+            bool canRankTeam = hasTeamIdentity && hasValidWinLossRecord;
+
+            // API以外から作る場合も同じ規則を守る。未消化の0勝・0敗は有効だが、負の勝敗は使えない。
+            if (!canRankTeam)
+            {
+                throw new ArgumentException("チーム名・所属リーグ・地区・勝敗に不足や誤りがあるため、順位表を作成できません。");
+            }
+
+            Name = name;
+            League = league;
+            Division = division;
+            Wins = wins;
+            Losses = losses;
+        }
+
         /// <summary>
         /// 勝率。勝敗から一意に決まるため外部データとして持ち回らず算出する
         /// （APIの値は小数3桁に丸められており、丸めた値で同率に見える2チームも正しい勝率で順位付けできる）
@@ -32,11 +62,14 @@ namespace TwitterMlbBot.Mlb
         /// 順位付けの規則で並べ替える（勝率降順、同率なら勝ち数降順）。
         /// 地区順位・ワイルドカード順位のどちらもこの規則で決める
         /// </summary>
-        public static IEnumerable<TeamStanding> OrderByRank(IEnumerable<TeamStanding> teams)
+        public static IReadOnlyList<TeamStanding> OrderByRank(IEnumerable<TeamStanding> teams)
         {
+            // 遅延評価のまま返すと、入力リストの後の変更で順位が変わる。
+            // この時点の結果を確定して返す（各要素は不変recordなので要素の複製は不要）
             return teams
                 .OrderByDescending(team => team.Percentage)
-                .ThenByDescending(team => team.Wins);
+                .ThenByDescending(team => team.Wins)
+                .ToList().AsReadOnly();
         }
     }
 }

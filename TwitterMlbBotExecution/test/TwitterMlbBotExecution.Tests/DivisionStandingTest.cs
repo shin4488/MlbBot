@@ -10,6 +10,29 @@ namespace TwitterMlbBotExecution.Tests;
 public class DivisionStandingTest
 {
     [Fact]
+    public void FromStandings_丸めると同率でも実際の勝率が高いチームを上位にする()
+    {
+        // ともに小数3桁では.572だが、83/145 > 87/152。勝ち数だけで逆転させない。
+        var division = Assert.Single(DivisionStanding.FromStandings(new[]
+        {
+            Teams.Create("AL", "East", "MoreWins", 87, 65),
+            Teams.Create("AL", "East", "HigherPercentage", 83, 62),
+        }));
+
+        Assert.Equal("HigherPercentage", division.RankedTeams[0].Team.Name);
+    }
+
+    [Fact]
+    public void FromStandings_未消化のチームは勝率0として扱う()
+    {
+        var team = Teams.Create("AL", "East", "NoGames", 0, 0);
+
+        Assert.Equal(0, team.Percentage);
+        var ranked = Assert.Single(Assert.Single(DivisionStanding.FromStandings(new[] { team })).RankedTeams);
+        Assert.Equal(0, ranked.GamesBehind);
+    }
+
+    [Fact]
     public void FromStandings_RankedTeamsは勝率降順で並ぶ()
     {
         // 入力はあえて順位順に並べない
