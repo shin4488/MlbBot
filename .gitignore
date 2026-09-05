@@ -12,3 +12,4 @@ crash.log
 backend.hcl
 terraform.tfvars
 *.auto.tfvars
+.env
