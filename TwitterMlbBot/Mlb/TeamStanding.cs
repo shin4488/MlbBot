@@ -46,7 +46,7 @@ namespace TwitterMlbBot.Mlb
         /// 勝率。勝敗から一意に決まるため外部データとして持ち回らず算出する
         /// （APIの値は小数3桁に丸められており、丸めた値で同率に見える2チームも正しい勝率で順位付けできる）
         /// </summary>
-        public double Percentage => Wins + Losses == 0 ? 0 : (double)Wins / (Wins + Losses);
+        public double Percentage => Wins + (long)Losses == 0 ? 0 : (double)Wins / (Wins + (long)Losses);
 
         /// <summary>
         /// 基準チームとのゲーム差。基準より上位（貯金が多い）なら負の値になる
@@ -55,7 +55,8 @@ namespace TwitterMlbBot.Mlb
         public float GamesBehind(TeamStanding baseline)
         {
             // ゲーム差の定義: （基準チームの貯金 - 対象チームの貯金）/ 2
-            return ((baseline.Wins - baseline.Losses) - (Wins - Losses)) / 2f;
+            // 外部入力がintの上限付近でも、加減算の途中で符号が反転しないようlongで計算する。
+            return ((baseline.Wins - (long)baseline.Losses) - (Wins - (long)Losses)) / 2f;
         }
 
         /// <summary>

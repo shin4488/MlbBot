@@ -29,13 +29,16 @@ namespace TwitterMlbBot.Mlb
             // APIキーはURIに含めずヘッダーで渡す（URIがログや例外メッセージに出てもキーが漏れないようにする）
             request.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
 
+            // 通信後のデータ変換とログ出力は、呼び出し元と同じスレッドで行う必要がない。
+            // 処理を再開する場所を呼び出し元に合わせるためだけの待ち時間や負担を避ける。
             using HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
-            string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                throw new MlbApiException($"{year}年の順位情報", response.StatusCode, responseBody);
+                // エラー本文には認証情報が含まれうるため、例外には取得対象と応答コードだけを残す。
+                throw new MlbApiException($"{year}年の順位情報", response.StatusCode);
             }
 
+            string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             IReadOnlyList<TeamStanding> standings = ParseStandings(responseBody);
             // レスポンス全文はログに出さず、運用確認に必要な件数のみ出力する
             logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", standings.Count, year);
@@ -63,9 +66,10 @@ namespace TwitterMlbBot.Mlb
                 ValidateTeamCoverage(standings);
                 return standings.AsReadOnly();
             }
-            catch (JsonException exception)
+            catch (JsonException)
             {
-                throw new InvalidOperationException("配信元の順位情報を読み取れないため、順位表を作成できません。", exception);
+                // JsonExceptionにも応答の断片が入るため、ログへ流れる内部例外には含めない。
+                throw new InvalidOperationException("配信元の順位情報を読み取れないため、順位表を作成できません。");
             }
         }
 

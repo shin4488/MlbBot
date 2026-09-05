@@ -49,9 +49,9 @@ namespace TwitterMlbBot.Twitter
             using HttpResponseMessage response = await client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                string responseContent = await response.Content.ReadAsStringAsync();
-                logger.LogWarning("Xへの投稿が受け付けられませんでした（応答コード: {StatusCode}）。Xからの回答: {ResponseBody}",
-                    response.StatusCode, responseContent);
+                // 応答には認証情報や投稿文面が含まれうる。調査用の応答コードだけをログに残す。
+                logger.LogWarning("Xへの投稿が受け付けられませんでした（応答コード: {StatusCode}）。",
+                    response.StatusCode);
             }
             return response.IsSuccessStatusCode;
         }
