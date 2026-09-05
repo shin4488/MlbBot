@@ -30,6 +30,14 @@ resource "aws_iam_user_policy" "terraform_iam_bootstrap" {
         Resource = module.deploy_role.oidc_provider_arn
       },
       {
+        # 信頼先のARNはplan中に取得するため、IAMユーザーで直接実行する場合も自身の情報を読めるようにする。
+        # 初回はこの権限を持つ管理者による付与、またはTerraform用ロールでの実行が必要。
+        Sid      = "ReadTerraformUser"
+        Effect   = "Allow"
+        Action   = ["iam:GetUser"]
+        Resource = local.terraform_user_arn
+      },
+      {
         Sid      = "SelfUserPolicy"
         Effect   = "Allow"
         Action   = ["iam:PutUserPolicy", "iam:GetUserPolicy", "iam:ListUserPolicies", "iam:DeleteUserPolicy"]
@@ -95,6 +103,7 @@ module "terraform_role" {
         Sid    = "Logs"
         Effect = "Allow"
         Action = ["logs:DescribeMetricFilters", "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:PutMetricFilter", "logs:DeleteMetricFilter", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
+        # タグ操作は末尾なし、その他の操作は :* 付きのARNが必要。名前直後の * で別グループまで許可しない。
         Resource = [
           "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}",
           "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${module.twitter_mlb_bot.log_group_name}:*",

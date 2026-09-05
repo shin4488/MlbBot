@@ -77,7 +77,8 @@ resource "aws_lambda_function" "this" {
 
 # ---- 非同期実行 ----
 
-# 投稿後に応答だけ失われた可能性があるため、関数エラーによる全体の再実行は既定で行わない。
+# 投稿が成功しても通信障害で応答を受け取れない場合に備え、重複投稿を避ける。
+# そのため、関数エラーによる全体の自動再実行は既定で行わない。
 # Lambdaの重複配信全般を防ぐものではなく、実行ごとの冪等性はアプリ側で別途考慮する。
 resource "aws_lambda_function_event_invoke_config" "this" {
   function_name          = aws_lambda_function.this.function_name

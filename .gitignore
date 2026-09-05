@@ -1,6 +1,7 @@
 .vs
 obj
 bin
+/tmp/
 
 # Terraform（stateにはLambda環境変数の値が平文で入るため、コミット厳禁）
 .terraform/
