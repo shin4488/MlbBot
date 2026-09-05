@@ -1,3 +1,4 @@
+using System.Globalization;
 using TwitterMlbBot.Composing;
 using TwitterMlbBot.Mlb;
 using Xunit;
@@ -14,7 +15,93 @@ namespace TwitterMlbBotExecution.Tests;
 /// </summary>
 public class TweetComposerTest
 {
+    [Theory]
+    [InlineData("fr-FR")]
+    [InlineData("ja-JP")]
+    public void Compose_実行環境の言語によらず英語表記の日付と小数を使う(string cultureName)
+    {
+        CultureInfo previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+            string text = Assert.Single(Compose(new List<TeamStanding>
+            {
+                Teams.Create("AL", "East", "First", 84, 56),
+                Teams.Create("AL", "East", "Second", 70, 71),
+            })).Text;
+
+            Assert.Contains("8/30", text);
+            Assert.Contains("14.5", text);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
     private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
+
+    [Fact]
+    public void 生成した文面リストは入力や受け取り側の操作で変更されない()
+    {
+        var source = new List<TeamStanding>
+        {
+            Teams.Create("AL", "East", "Alpha", 90, 50),
+            Teams.Create("AL", "East", "Beta", 80, 60),
+        };
+        var composer = new TweetComposer(new HashtagProvider());
+        var divisions = DivisionStanding.FromStandings(source);
+        var results = new[]
+        {
+            composer.ComposeTweets(source, testDate),
+            composer.Compose(divisions, testDate),
+            composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), testDate),
+        };
+        source.Clear();
+
+        foreach (var tweets in results)
+        {
+            Assert.Contains(tweets, tweet => tweet.Text.Contains("Beta"));
+            var expected = tweets.ToArray();
+            if (tweets is IList<TweetContent> writable)
+            {
+                Assert.ThrowsAny<Exception>(() => writable.Clear());
+            }
+            Assert.Equal(expected, tweets);
+        }
+    }
+
+    [Theory]
+    [InlineData(7, 31, 2)]
+    [InlineData(8, 1, 4)]
+    public void ComposeTweets_8月の開始から地区の後にリーグごとのワイルドカードを追加する(int month, int day, int count)
+    {
+        var standings = new List<TeamStanding>
+        {
+            Teams.Create("AL", "East", "Alpha", 90, 50),
+            Teams.Create("AL", "East", "Beta", 80, 60),
+            Teams.Create("NL", "West", "Gamma", 90, 50),
+            Teams.Create("NL", "West", "Delta", 80, 60),
+        };
+
+        var tweets = new TweetComposer(new HashtagProvider())
+            .ComposeTweets(standings, new DateOnly(2026, month, day));
+
+        Assert.Equal(count, tweets.Count);
+        Assert.All(tweets.Take(2), tweet => Assert.DoesNotContain("Wild Card", tweet.Text));
+        Assert.All(tweets.Skip(2), tweet => Assert.Contains("Wild Card", tweet.Text));
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(8)]
+    public void ComposeTweets_成績が空なら投稿文面はない(int month)
+    {
+        var tweets = new TweetComposer(new HashtagProvider())
+            .ComposeTweets(Array.Empty<TeamStanding>(), new DateOnly(2026, month, 1));
+
+        Assert.Empty(tweets);
+    }
 
     private static IReadOnlyList<TweetContent> Compose(List<TeamStanding> standings)
     {

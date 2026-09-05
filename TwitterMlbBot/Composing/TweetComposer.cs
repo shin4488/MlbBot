@@ -6,10 +6,14 @@ namespace TwitterMlbBot.Composing
 {
     /// <summary>
     /// 順位表からツイート文面を組み立てる純粋クラス（ネットワーク・設定に依存しない）
-    /// 地区分け・順位付けはDivisionStanding / WildCardStandingが担い、このクラスは文面の見た目だけに責任を持つ
+    /// 地区分け・順位付けはドメインに任せ、このクラスは投稿対象の選定と表示を担う
     /// </summary>
     internal class TweetComposer
     {
+        // ワイルドカードの投稿は争いが本格化する8月以降に絞る。
+        // 野球の順位規則ではなく、情報価値と投稿の従量課金を考慮した編集方針なので表示側に置く
+        private const int PlayoffRaceStartMonth = 8;
+
         /// <summary>
         /// ワイルドカードツイートに表示するチーム数
         /// （プレーオフ圏内3チーム + 追走3チーム。文字数と情報価値のバランスで決めた表示都合の値）
@@ -23,6 +27,21 @@ namespace TwitterMlbBot.Composing
             this.hashtagProvider = hashtagProvider;
         }
 
+        public IReadOnlyList<TweetContent> ComposeTweets(IReadOnlyList<TeamStanding> standings, DateOnly date)
+        {
+            IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
+            List<TweetContent> tweets = new(Compose(divisions, date));
+            bool shouldIncludeWildCards = date.Month >= PlayoffRaceStartMonth;
+            if (shouldIncludeWildCards)
+            {
+                // 既存の投稿順（全地区の後にワイルドカード）を維持する
+                IReadOnlyList<WildCardStanding> wildCards = WildCardStanding.FromDivisions(divisions);
+                tweets.AddRange(ComposeWildCards(wildCards, date));
+            }
+            // 投稿中に文面リストの追加・削除が起きないよう、完成したリストは変更不可にする
+            return tweets.AsReadOnly();
+        }
+
         /// <summary>
         /// 地区順位表をツイート文面リストに変換する
         /// </summary>
@@ -34,7 +53,7 @@ namespace TwitterMlbBot.Composing
         {
             return divisions
                 .Select(division => ComposeDivisionTweet(division, date))
-                .ToList();
+                .ToList().AsReadOnly();
         }
 
         /// <summary>
@@ -44,7 +63,7 @@ namespace TwitterMlbBot.Composing
         {
             return wildCards
                 .Select(wildCard => ComposeWildCardTweet(wildCard, date))
-                .ToList();
+                .ToList().AsReadOnly();
         }
 
         private TweetContent ComposeDivisionTweet(DivisionStanding division, DateOnly date)

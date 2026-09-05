@@ -6,7 +6,9 @@ using TwitterMlbBot.Twitter;
 namespace TwitterMlbBot
 {
     /// <summary>
-    /// 「シーズン判定 → 順位取得 → 地区順位表化 → 文面組み立て → 送信」のオーケストレーションだけを持つクラス
+    /// 「シーズン判定 → 順位取得 → 文面組み立て → 送信」の流れと失敗時の方針を持つ。
+    /// 接続先はinterfaceで差し替え、外部I/Oのない文面生成はTweetComposerを直接使う。
+    /// 実装が1つの純粋な処理まで抽象化せず、読み進める際の行き来を減らす
     /// </summary>
     internal class BotRunner
     {
@@ -31,7 +33,7 @@ namespace TwitterMlbBot
         }
 
         /// <summary>
-        /// 指定した年の順位を取得し、地区ごとにツイートする
+        /// 指定した年の順位を取得し、その日に必要な文面を順に送信する
         /// </summary>
         /// <param name="year">対象の西暦年</param>
         /// <param name="date">ツイート文面に表示する日付</param>
@@ -43,31 +45,29 @@ namespace TwitterMlbBot
             }
 
             IReadOnlyList<TeamStanding> standings = await standingsProvider.GetStandingsAsync(year);
-            IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
-            List<TweetContent> tweetContentList = new(composer.Compose(divisions, date));
-
-            if (WildCardStanding.IsPlayoffRacePeriod(date))
-            {
-                tweetContentList.AddRange(
-                    composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), date));
-            }
+            IReadOnlyList<TweetContent> tweets = composer.ComposeTweets(standings, date);
 
             // 順位データが存在しない場合（シーズンオフ等）はツイートしない
-            if (tweetContentList.Count == 0)
+            if (tweets.Count == 0)
             {
                 logger.LogInformation("順位データが空のためツイートしません");
                 return;
             }
 
+            await SendTweetsAsync(tweets);
+        }
+
+        private async Task SendTweetsAsync(IReadOnlyList<TweetContent> tweets)
+        {
             int successCount = 0;
-            foreach (TweetContent tweetContent in tweetContentList)
+            foreach (TweetContent tweetContent in tweets)
             {
                 if (tweetContent.ExceedsCharacterLimit)
                 {
                     // 文字数はXの重み付きルールで数えているが、絵文字の結合シーケンス等は安全側に多く数えるため、
                     // 超過と判定しても送信を止めず警告にとどめる（実際に超過していればX APIが拒否し、送信失敗として記録される）
                     logger.LogWarning(
-                        "文面が上限（{Limit}字）を超えている可能性があります（{Count}字）",
+                        "投稿文面がXの文字数上限（{Limit}字）を超えている可能性があります（{Count}字）。投稿は試みますが、Xに拒否される場合があります",
                         TweetContent.CharacterLimit, tweetContent.CharacterCount);
                 }
                 if (await TrySendAsync(tweetContent))
@@ -76,11 +76,11 @@ namespace TwitterMlbBot
                 }
             }
 
-            logger.LogInformation("Tweets sent: {SuccessCount}/{TotalCount}", successCount, tweetContentList.Count);
+            logger.LogInformation("Tweets sent: {SuccessCount}/{TotalCount}", successCount, tweets.Count);
             if (successCount == 0)
             {
                 // 一部失敗は重複コンテンツ拒否など正常系でも起きるため、全件失敗のみエラーにする
-                throw new AllTweetsFailedException(tweetContentList.Count);
+                throw new AllTweetsFailedException(tweets.Count);
             }
         }
 
@@ -97,7 +97,7 @@ namespace TwitterMlbBot
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "ツイートの送信中に例外が発生しました。残りのツイートは続行します");
+                logger.LogError(exception, "この文面の投稿に失敗しました。残りの文面の投稿は続けます");
                 return false;
             }
         }

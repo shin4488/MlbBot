@@ -11,17 +11,14 @@ namespace TwitterMlbBot.Mlb
     /// </summary>
     internal class MlbApiClient : IStandingsProvider
     {
-        private static readonly HttpClient client = new HttpClient()
-        {
-            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
-            Timeout = TimeSpan.FromSeconds(10),
-        };
+        private readonly HttpClient client;
         private static readonly string endpoint = "https://api.sportsdata.io/v3/mlb/scores/json/Standings/";
         private readonly string apiKey;
         private readonly ILogger<MlbApiClient> logger;
 
-        public MlbApiClient(string apiKey, ILogger<MlbApiClient> logger)
+        public MlbApiClient(HttpClient client, string apiKey, ILogger<MlbApiClient> logger)
         {
+            this.client = client;
             this.apiKey = apiKey;
             this.logger = logger;
         }
@@ -36,7 +33,7 @@ namespace TwitterMlbBot.Mlb
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                throw new MlbApiException(response.StatusCode, responseBody);
+                throw new MlbApiException($"{year}年の順位情報", response.StatusCode, responseBody);
             }
 
             IReadOnlyList<TeamStanding> standings = ParseStandings(responseBody);

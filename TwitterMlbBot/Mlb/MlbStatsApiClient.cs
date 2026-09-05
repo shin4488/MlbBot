@@ -11,17 +11,14 @@ namespace TwitterMlbBot.Mlb
     /// </summary>
     internal class MlbStatsApiClient : ISeasonCalendarProvider
     {
-        private static readonly HttpClient client = new HttpClient()
-        {
-            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
-            Timeout = TimeSpan.FromSeconds(10),
-        };
+        private readonly HttpClient client;
         // sportId=1 はMLBの指定（Stats APIはマイナーリーグ等も扱うため必須）
         private static readonly string endpointFormat = "https://statsapi.mlb.com/api/v1/seasons/{0}?sportId=1";
         private readonly ILogger<MlbStatsApiClient> logger;
 
-        public MlbStatsApiClient(ILogger<MlbStatsApiClient> logger)
+        public MlbStatsApiClient(HttpClient client, ILogger<MlbStatsApiClient> logger)
         {
+            this.client = client;
             this.logger = logger;
         }
 
@@ -32,8 +29,8 @@ namespace TwitterMlbBot.Mlb
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                // 取得失敗時は投稿可否を判断できないため異常終了させ、エラーアラーム（メール通知）につなげる
-                throw new MlbApiException(response.StatusCode, responseBody);
+                // クライアントは取得失敗だけを伝える。投稿続行や通知の判断は実行側の方針に委ねる
+                throw new MlbApiException($"{year}年のシーズン日程", response.StatusCode, responseBody);
             }
 
             SeasonCalendar calendar = ParseSeasonCalendar(responseBody, year);

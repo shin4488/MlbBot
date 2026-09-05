@@ -7,7 +7,7 @@ namespace TwitterMlbBot
     internal class AllTweetsFailedException : Exception
     {
         public AllTweetsFailedException(int attemptedCount)
-            : base($"ツイートが全{attemptedCount}件失敗しました。失敗理由は直前のログを参照。")
+            : base($"投稿を試みた{attemptedCount}件すべてに失敗しました。各投稿の失敗理由は直前のログを確認してください。")
         {
         }
     }

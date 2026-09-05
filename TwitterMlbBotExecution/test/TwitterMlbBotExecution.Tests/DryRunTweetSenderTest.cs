@@ -12,18 +12,9 @@ public class DryRunTweetSenderTest
     [Fact]
     public async Task SendAsync_文面をコンソール出力し成功として返す()
     {
-        TextWriter originalOut = Console.Out;
         using var writer = new StringWriter();
-        Console.SetOut(writer);
-        bool result;
-        try
-        {
-            result = await new DryRunTweetSender().SendAsync(new TweetContent("テスト文面です"));
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-        }
+
+        bool result = await new DryRunTweetSender(writer).SendAsync(new TweetContent("テスト文面です"));
 
         Assert.True(result);
         Assert.Contains("テスト文面です", writer.ToString());

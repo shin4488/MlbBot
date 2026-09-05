@@ -59,17 +59,5 @@ namespace TwitterMlbBot.Mlb
                 .Where(wildCard => wildCard.RankedTeams.Count > 0)
                 .ToList().AsReadOnly();
         }
-
-        // ワイルドカード順位に情報価値が出るのはプレーオフ争いが本格化する8月以降
-        // （シーズン序盤から出すと読む価値が薄いうえ、X APIの従量課金も無駄になる）
-        private const int PlayoffRaceStartMonth = 8;
-
-        /// <summary>
-        /// ワイルドカード順位をツイートする価値のある時期（プレーオフ争いの本格化以降）か
-        /// </summary>
-        public static bool IsPlayoffRacePeriod(DateOnly gameDate)
-        {
-            return gameDate.Month >= PlayoffRaceStartMonth;
-        }
     }
 }

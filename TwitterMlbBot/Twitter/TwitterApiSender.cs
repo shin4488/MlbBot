@@ -12,19 +12,16 @@ namespace TwitterMlbBot.Twitter
     internal class TwitterApiSender : ITweetSender
     {
         private static readonly string twitterEndpoint = "https://api.twitter.com/2/tweets";
-        private static readonly HttpClient client = new HttpClient()
-        {
-            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
-            Timeout = TimeSpan.FromSeconds(10),
-        };
+        private readonly HttpClient client;
         // X APIは短時間の連続POSTを503で拒否するため、投稿と投稿の間に空ける最低間隔
         private static readonly TimeSpan postInterval = TimeSpan.FromSeconds(1);
         private readonly OAuth1 authorization;
         private readonly ILogger<TwitterApiSender> logger;
         private bool hasSentBefore;
 
-        public TwitterApiSender(OAuth1 authorization, ILogger<TwitterApiSender> logger)
+        public TwitterApiSender(HttpClient client, OAuth1 authorization, ILogger<TwitterApiSender> logger)
         {
+            this.client = client;
             this.authorization = authorization;
             this.logger = logger;
         }
@@ -47,11 +44,14 @@ namespace TwitterMlbBot.Twitter
             request.Headers.Add("Authorization", $"OAuth {authorizationContent}");
             request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
+            // 応答を受け取れなくても投稿済みの可能性があるので、ここで自動再送はしない。
+            // 次の文面への続行と全件失敗の判定はBotRunnerが担う
             using HttpResponseMessage response = await client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
                 string responseContent = await response.Content.ReadAsStringAsync();
-                logger.LogWarning("Tweet failed: {StatusCode} - {ResponseBody}", response.StatusCode, responseContent);
+                logger.LogWarning("Xへの投稿が受け付けられませんでした（応答コード: {StatusCode}）。Xからの回答: {ResponseBody}",
+                    response.StatusCode, responseContent);
             }
             return response.IsSuccessStatusCode;
         }
