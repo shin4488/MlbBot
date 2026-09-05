@@ -1,25 +1,56 @@
 #!/usr/bin/env bash
-# Bashツール実行前（PreToolUse）に、ボットを「実ツイートする通常モード」でローカル実行しようとする
-# コマンドを止めるフック。通常送信はLambdaの定期実行経由のみとし、ローカルはドライラン限定にする運用を
-# Claude側の操作ミスから機械的に守る（環境変数に認証情報がある環境では、1回の実行で実際に投稿されてしまう）。
-# 標準入力でツール実行情報のJSONを受け取り、exit 2 で実行を拒否し理由をClaudeへ返す。
-set -u
+# Claude / Codex 共通。シェルを実行・展開せず、単独のドライランだけを許可する。
+deny() {
+  echo '実投稿を防ぐため拒否しました。単独の dotnet run --project TwitterMlbBot -- --dry-run を使用してください。' >&2
+  exit 2
+}
 
-command=$(jq -r '.tool_input.command // empty')
+input=$(cat)
+command=$(jq -er '.tool_input.command | strings' <<< "$input") || deny
+cwd=$(jq -r '.cwd // empty' <<< "$input") || deny
+cwd=${cwd:-$PWD}
 
-# ボット本体の実行コマンド以外は対象外（ビルド・テスト・他プロジェクトの dotnet run は通す）
-case "$command" in
-  *"dotnet run"*TwitterMlbBot*|*TwitterMlbBot.dll*) ;;
+# 引用・エスケープされた起動も見落とさない。これは検出専用で、許可判定には使わない。
+plain=$(tr -d "'\"\\\\" <<< "$command")
+case "$plain" in
+  *dotnet*run*)
+    [[ "$plain" == *TwitterMlbBot* || -f "$cwd/TwitterMlbBot.csproj" ]] || exit 0 ;;
+  *TwitterMlbBot.dll*) ;;
   *) exit 0 ;;
 esac
 
-# ドライラン指定（引数 --dry-run、または環境変数 DRY_RUN=true）があれば通す
-case "$command" in
-  *--dry-run*|*DRY_RUN=true*|*DRY_RUN=TRUE*) exit 0 ;;
-esac
+# 引用・展開・複合コマンドを解析する代わりに、単純な表記に限定する。
+simple_command='^[a-zA-Z0-9_./=[:blank:]-]+$'
+[[ "$command" =~ $simple_command ]] || deny
+read -r -a words <<< "$command"
+set -- "${words[@]}"
+[ "${1-}" != env ] || shift
 
-cat >&2 <<'MSG'
-ボットの通常送信（実ツイート）をローカルで実行するコマンドのため拒否しました。
-ローカルでの実行はドライラン限定です: dotnet run --project TwitterMlbBot -- --dry-run
-MSG
-exit 2
+dry_run=false
+while [[ "${1-}" == *=* ]]; do
+  case "$1" in
+    DRY_RUN=*) dry_run=false; [[ "$1" =~ ^DRY_RUN=[Tt][Rr][Uu][Ee]$ ]] && dry_run=true ;;
+  esac
+  shift
+done
+[[ "${1##*/}" == dotnet ]] || deny
+
+case "${2-}" in
+  run)
+    shift 2
+    # dotnet 自身のオプション値を、アプリの --dry-run と取り違えない。
+    while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
+      # CLI 側で環境変数を上書きする起動には、明示的な --dry-run を要求する。
+      case "$1" in -e* | --environment*) dry_run=false ;; esac
+      shift
+    done
+    [ "$#" -eq 0 ] || shift ;;
+  *TwitterMlbBot.dll) shift 2 ;;
+  exec) [[ "${3-}" == *TwitterMlbBot.dll ]] || deny; shift 3 ;;
+  *) deny ;;
+esac
+$dry_run && exit 0
+for arg; do
+  [ "$arg" != --dry-run ] || exit 0
+done
+deny
