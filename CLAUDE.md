@@ -1,4 +1,4 @@
-# 開発ガイド（Claude Code / Codex共通）
+# 開発ガイド（Claude Code / Codex / Gemini共通）
 
 MLBの順位表をX（Twitter）に投稿するボット。AWS Lambdaで実行する。
 `AGENTS.md` はこのファイルへのシンボリックリンクなので、共通の指示はここを編集する。
@@ -29,6 +29,7 @@ dotnet format MlbBot.sln
 - `Directory.Build.props` の `TreatWarningsAsErrors` により、警告もビルドエラーになる。依存パッケージ更新時も含め、その場で直す。
 - コード変更後は `dotnet format` を適用する。CIは `--verify-no-changes` で検証する。
 - コミット・push・PR作成前と変更の仕上げには、`pre-pr-check` skillで検証・機密情報スキャン・関連文書の確認を行う。
+- 認証情報・権限・外部入力の扱いを変更するときは `security-hardening` skillで確認する。エージェントのフックは補助であり、アプリやIAM自体の防御の代わりにしない。
 
 ### ドライラン
 
@@ -181,16 +182,18 @@ git secrets --register-aws
 PR検証の `ci.yml` とデプロイ前検証の `lambda_deploy.yml` は、共通のcomposite action `.github/actions/verify-dotnet/` を使う。
 ビルド・フォーマット検証・テストの内容をそろえ、SDKバージョンは `global.json` から読む。
 
-masterへの変更は、`lambda_deploy.yml` のverify通過後にReleaseの `dotnet publish` 成果物をLambdaへ配置する。
-Markdown・`.github/`・`.claude/`・`.vscode/`・`.gitignore`・`infra/` だけの変更は自動デプロイの対象外。
+masterへの変更は、`lambda_deploy.yml` のverifyで検証・Releaseビルド・パッケージを行い、その実行の成果物だけをdeployジョブでLambdaへ配置する。
+ビルド側には本番認証情報・OIDC発行権限を与えない。deploy側ではリポジトリをcheckoutせず、master以外の手動実行も拒否する。シェルの引数は環境変数で受けて引用し、式を直接埋め込まない。
+Markdown・`.github/`・`.claude/`・`.agents/`・`.codex/`・`.vscode/`・`.gitignore`・`infra/` だけの変更は自動デプロイの対象外。
 正確な対象は[ワークフローのpaths-ignore](.github/workflows/lambda_deploy.yml)を参照する。
 
 GitHub Actionsの依存更新はDependabotが月次で1つのPRにまとめる。
 レビューは `review-dependabot-prs` skillに従い、OK/NGを問わずPRに結果を残す。OKならマージし、NGなら保留する。
 
-## Claude Code・Codexの設定
+## Claude Code・Codex・Geminiの設定
 
-共通ファイルの実体はClaude側に置き、Codexから相対シンボリックリンクで参照する。
+共通ファイルの実体はClaude側に置き、他のエージェントから相対シンボリックリンクで参照する。
+Gemini CLIでこの開発ガイドを読み込むには、`settings.json` の `context.fileName` に `AGENTS.md` を指定する（標準では `GEMINI.md` のみ）。skillは `.agents/skills` から読み込める。設定方法は[公式ガイド](https://geminicli.com/docs/cli/gemini-md/#customize-the-context-file-name)を参照。
 
 | 参照するパス | 実体 |
 | --- | --- |
@@ -207,11 +210,12 @@ Claude Codeでは、Terraformの適用・破棄を `.claude/settings.json` のde
 | `guard-real-run.sh` | Bash実行前（PreToolUse）に通常モードのローカル実行を拒否する。`--dry-run` / `DRY_RUN=true` 付きは許可する |
 | `terraform-check.sh` | Edit/Write後（PostToolUse）に `.tf` の変更を確認し、`terraform fmt` と `validate` を行う |
 
-共通skillは `.claude/skills/` に置く。他のリポジトリでもそのまま使える内容にし、このリポジトリ固有の指示は含めない。
+共通skillは `.claude/skills/` に置く。他のリポジトリでもそのまま使える内容にし、このリポジトリ固有の指示は含めない。基本のfrontmatterとMarkdownを使い、特定エージェントのツール名・専用設定・フックがないと実行できない手順にしない。
 
 | skill | 用途 |
 | --- | --- |
 | `pre-pr-check` | 検証コマンド・機密情報・関連文書の最終確認 |
+| `security-hardening` | CI・IAM・外部通信の安全性の確認と改善 |
 | `pin-github-actions` | pinactでGitHub Actionsをフルcommit SHAに固定する |
 | `spec-based-testing` | 仕様に基づくテストの作成・見直し |
 | `review-dependabot-prs` | Dependabot PRのレビューとマージ判断。週次のroutineでも使う |

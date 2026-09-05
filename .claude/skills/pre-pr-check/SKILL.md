@@ -21,12 +21,16 @@ CLAUDE.md や README に書かれたビルド・フォーマット・テスト�
 検出は既存ツールに任せる（自前のパターン集を書かない）。未導入なら `brew install gitleaks`。
 
 ```bash
-gitleaks git --no-banner --log-opts="<base>..HEAD"   # コミット済みの差分（base はデフォルトブランチ）
-gitleaks git --no-banner --pre-commit                  # 未ステージの変更
-gitleaks git --no-banner --staged                      # ステージ済みの変更（--pre-commit と同時指定するとこちらだけになる）
-gitleaks dir --no-banner .                             # 未追跡の新規ファイルも含めた作業ツリー全体（git diffに現れないファイル用）
+gitleaks git --no-banner --redact --log-opts="<base>..HEAD"   # コミット済みの差分（base はデフォルトブランチ）
+gitleaks git --no-banner --redact --pre-commit                  # 未ステージの変更
+gitleaks git --no-banner --redact --staged                      # ステージ済みの変更
+gitleaks dir --no-banner --redact <確認用ディレクトリ>          # Git管理対象・追加予定ファイルだけをコピーして検査
 git secrets --scan                                     # git-secrets を導入済みのリポジトリでは併用（pre-commitフックと同じ検査）
 ```
+
+秘密ファイルの値を画面・コマンド引数・PRへ出さない。gitignore対象の `.env` やstateを確認用コピーに含めない。git-secretsなどredact機能のないツールの出力は捕捉し、検出行をそのまま表示しない。失敗時も値を伏せたまま該当箇所を調べる。
+
+認証情報・IAM・外部入力を変更した場合は、利用可能なら `security-hardening` skillも参照し、転送・ログ・シェル・権限を通じた流出や権限拡大を確認する。
 
 テストの固定入力（ダミー鍵から計算した署名値など）を高エントロピー文字列として誤検出することがある。機密でないと確認できたら、その行に `// gitleaks:allow` を理由のコメントとともに付けて除外する（`.gitleaksignore` や設定ファイルではなく行に書くと、値が変わったときに指定が自然に無効になる）。
 
