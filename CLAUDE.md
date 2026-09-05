@@ -28,8 +28,8 @@ dotnet format MlbBot.sln
 - 3プロジェクトとも対象はnet10.0。SDKは `global.json` で10.0系に固定している。
 - `Directory.Build.props` の `TreatWarningsAsErrors` により、警告もビルドエラーになる。依存パッケージ更新時も含め、その場で直す。
 - コード変更後は `dotnet format` を適用する。CIは `--verify-no-changes` で検証する。
-- コミット・push・PR作成前と変更の仕上げには、`pre-pr-check` skillで検証・機密情報スキャン・関連文書の確認を行う。
-- 認証情報・権限・外部入力の扱いを変更するときは `security-hardening` skillで確認する。エージェントのフックは補助であり、アプリやIAM自体の防御の代わりにしない。
+- コミット・push・PR作成前と変更の仕上げには、`verify-changes` skillで検証・機密情報スキャン・関連文書の確認を行う。
+- 認証情報・権限・外部入力の扱いを変更するときは `security-review` skillで確認する。エージェントのフックは補助であり、アプリやIAM自体の防御の代わりにしない。
 
 ### ドライラン
 
@@ -99,7 +99,7 @@ flowchart LR
 | `TwitterMlbBotExecution/test/` | 通信不要のテストと、Skip付きの手動疎通用 `FunctionTest` |
 | `infra/` | Terraformによるインフラ管理 |
 | `.github/actions/verify-dotnet/` | CIとデプロイ前に使う共通の検証ステップ |
-| `.claude/` | 共通のフック・skillとClaude Code用の登録設定 |
+| `.claude/` | リポジトリ固有のフックとClaude Code用の登録設定 |
 
 ### 判断を置く場所
 
@@ -196,29 +196,12 @@ GitHub Actionsの依存更新はDependabotが月次で1つのPRにまとめる�
 
 ## Claude Code・Codex・Geminiの設定
 
-共通ファイルの実体はClaude側に置き、他のエージェントから相対シンボリックリンクで参照する。
-Gemini CLIでこの開発ガイドを読み込むには、`settings.json` の `context.fileName` に `AGENTS.md` を指定する（標準では `GEMINI.md` のみ）。skillは `.agents/skills` から読み込める。設定方法は[公式ガイド](https://geminicli.com/docs/cli/gemini-md/#customize-the-context-file-name)を参照。
-
-| 参照するパス | 実体 |
-| --- | --- |
-| `AGENTS.md` | `CLAUDE.md` |
-| `.agents/skills` | `../.claude/skills` |
-| `.codex/hooks` | `../.claude/hooks` |
-
-- **登録先**：Claude Code は `.claude/settings.json`、Codex は `.codex/hooks.json`。
-- **Codex の承認**：リポジトリを信頼し、CLI の `/hooks` で承認する。登録コマンド変更時も再承認する（[手順](https://learn.chatgpt.com/docs/hooks)）。
-- **必要なツール**：ホストの Bash・jq・realpath・Terraform。
-- **配置とパス**：共通フックは `.claude/hooks/`。ルートは Claude Code の `CLAUDE_PROJECT_DIR`、Codex の `git rev-parse --show-toplevel` で取得し、絶対パスを直書きしない。
-- **権限**：Terraform の適用・破棄は人間が行う。Claude Code の deny 設定は Codex に引き継がれない。
-- **投稿防止**：`guard-real-run.sh` が Bash 実行前に通常モードのローカル起動を拒否する。確認時は `dotnet run --project TwitterMlbBot -- --dry-run` を単独・引用なしで実行する。
-- **Terraform 検査**：`terraform-check.sh` が `.tf` の編集後に `terraform fmt` と `validate` を実行する。
-
-共通skillは `.claude/skills/` に置く。他のリポジトリでもそのまま使える内容にし、このリポジトリ固有の指示は含めない。基本のfrontmatterとMarkdownを使い、特定エージェントのツール名・専用設定・フックがないと実行できない手順にしない。
-
-| skill | 用途 |
-| --- | --- |
-| `pre-pr-check` | 検証コマンド・機密情報・関連文書の最終確認 |
-| `security-hardening` | CI・IAM・外部通信の安全性の確認と改善 |
-| `pin-github-actions` | pinactでGitHub Actionsをフルcommit SHAに固定する |
-| `spec-based-testing` | 仕様に基づくテストの作成・見直し |
-| `review-dependabot-prs` | Dependabot PRのレビューとマージ判断。週次のroutineでも使う |
+- `AGENTS.md` → `CLAUDE.md` は相対シンボリックリンク。指示の実体はこのファイルで編集する。
+- `make setup` で、導入済みのClaude・Codexに [agent-plugins](https://github.com/shin4488/agent-plugins) をユーザー単位でインストールする。共通skillはプラグイン側で管理する。
+- 共通skillには `verify-changes`・`security-review`・`pin-github-actions`・`spec-based-testing`・`review-dependabot-prs` を使う。このリポジトリ固有の実行条件・マージ権限は、このガイドの規約に従う。
+- 編集後はプラグインから `.claude/hooks/post-edit.sh` を呼ぶ。編集した `.tf` を整形し、初期化済みの `infra/environments/prod` で一度だけ検証する。適用・破棄は人間が行う。
+- 実投稿防止の `guard-real-run.sh` は、Claudeの `.claude/settings.json` とCodexの `.codex/hooks.json` に `PreToolUse` として残す。`.codex/hooks` → `.claude/hooks` は相対シンボリックリンク。
+- 導入後はツールを読み込み直し、リポジトリを信頼してCodexの `/hooks` で承認する。登録コマンド変更時も再確認する（[手順](https://learn.chatgpt.com/docs/hooks)）。
+- ホストにはBash・Git・jq・realpath・Terraformが必要。Claudeのdeny設定はCodexには引き継がれない。
+- 投稿防止hookがあるため、確認時は `dotnet run --project TwitterMlbBot -- --dry-run` を単独・引用なしで実行する。
+- Gemini CLIで開発ガイドを読むには、`settings.json` の `context.fileName` に `AGENTS.md` を指定する（[公式ガイド](https://geminicli.com/docs/cli/gemini-md/#customize-the-context-file-name)）。このプラグインの導入対象はClaude CodeとCodex。
