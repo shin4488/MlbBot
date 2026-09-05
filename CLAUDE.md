@@ -205,7 +205,7 @@ Gemini CLIでこの開発ガイドを読み込むには、`settings.json` の `c
 | `.agents/skills` | `../.claude/skills` |
 | `.codex/hooks` | `../.claude/hooks` |
 
-フックの登録は Claude Code の `.claude/settings.json` と Codex の `.codex/hooks.json` で別々に管理する。Codex は `.codex/config.toml` で有効にし、このリポジトリを信頼した上で CLI の `/hooks` から定義を確認・承認する。登録コマンドを変更した後も再確認する（[公式手順](https://learn.chatgpt.com/docs/hooks)）。共有フックにはホストの Bash・jq・realpath・Terraform が必要。
+フックの登録は Claude Code の `.claude/settings.json` と Codex の `.codex/hooks.json` で別々に管理する。Codex はこのリポジトリを信頼した上で CLI の `/hooks` から定義を確認・承認する。登録コマンドを変更した後も再確認する（[公式手順](https://learn.chatgpt.com/docs/hooks)）。共有フックにはホストの Bash・jq・realpath・Terraform が必要。
 フックのパスはClaude Codeでは `CLAUDE_PROJECT_DIR`、Codexでは `git rev-parse --show-toplevel` で解決する。ユーザー固有の絶対パスは書かない。
 Claude Code では Terraform の適用・破棄を `.claude/settings.json` の deny ルールでも禁止している。この permissions 設定は Codex に引き継がれない。両エージェントとも、このガイドの「適用・破棄は人間が行う」という指示に従う。
 
