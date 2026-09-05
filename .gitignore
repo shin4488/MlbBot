@@ -5,6 +5,8 @@ bin
 
 # Terraform（stateにはLambda環境変数の値が平文で入るため、コミット厳禁）
 .terraform/
+# モジュール単独のテスト用。本番環境のロックファイルは引き続き管理する。
+/infra/modules/*/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan

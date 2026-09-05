@@ -13,7 +13,7 @@ infra/
 │   ├── github_oidc_role/      … GitHub Actionsの認証とデプロイ用ロール
 │   └── assumable_role/        … 指定ユーザーが利用する管理用ロール
 └── environments/
-    └── prod/                 … 本番環境の実値定義（ここでterraformコマンドを実行する）
+    └── prod/                 … 本番環境の実値定義（MakefileがここでTerraformを実行する）
         ├── main.tf / monitoring.tf / iam.tf … 各モジュールに実際の値を渡す
         ├── backend.tf                  … state管理の説明（S3バックエンド）
         ├── backend.hcl.example         … S3バックエンド設定の雛形（実物はgitignore）
@@ -88,26 +88,37 @@ AWSの仕様上、対象を指定できない一覧取得操作だけは、全�
 
 ## 初回セットアップ（clone直後）
 
+先に `~/.aws/config` にTerraform用のプロファイルを作る（[運用メモ](#運用メモ)参照）。
+
 ```bash
-cd infra/environments/prod
-cp terraform.tfvars.example terraform.tfvars   # 実際の値に書き換える
-cp backend.hcl.example backend.hcl             # 実際の値に書き換える
-terraform init -backend-config=backend.hcl
-terraform plan    # 既存インフラと一致していれば「No changes」になる
+# リポジトリのルートで実行する
+# .envがない場合だけ作成する（既存のAPIキーを上書きしない）
+test -e .env || cp .env.example .env
+cp infra/environments/prod/terraform.tfvars.example infra/environments/prod/terraform.tfvars
+cp infra/environments/prod/backend.hcl.example infra/environments/prod/backend.hcl
+# .envにTF_AWS_PROFILE=の行を追加して名前を記入し、残り2ファイルの値も設定する
+make tf-init
+make tf-plan    # 既存インフラと一致していれば「No changes」になる
 ```
 
 ## 日常の使い方
 
-```bash
-cd infra/environments/prod
-terraform plan     # 差分確認
-terraform apply    # インフラ設定を変更するとき
-terraform fmt -recursive && terraform validate   # コミット前
-```
+`.env` に `TF_AWS_PROFILE=プロファイル名` を設定すれば、以下をリポジトリのルートで実行できる（[設定例](../.env.example)・[Makefile](../Makefile)）。毎回のプロファイル指定やディレクトリ移動は不要。
 
-各モジュールの `tests/` で、ロールを利用できるユーザー・Lambdaのログ権限・再試行設定を検証できます。
-モジュールを `terraform init -backend=false` で準備してから `terraform test` で実行します。
-テストはproviderをすべてモック化し、planだけで判定します。AWSの認証情報や本番stateは使いません。
+| ルートで実行するコマンド | 用途 |
+| --- | --- |
+| `make` | コマンド一覧を表示 |
+| `make tf-plan` | 本番との差分を確認 |
+| `make tf-apply` | 差分を確認し、`yes` で適用（人間が実行） |
+| `make tf-fmt tf-validate` | infra全体の書式整形・設定検証 |
+| `make tf-test` | テスト対象モジュールの準備・テスト |
+
+- `.env` はGit管理外。プロファイル名だけを読み、未設定なら接続前に停止する。APIキーやターミナル全体の設定には触れない。
+- 一時的な切り替え：`make tf-plan TF_AWS_PROFILE=<プロファイル名>`
+- Terraformを直接使う場合：`infra/environments/prod` でプロファイルを指定して実行。
+- モジュールのテスト：`make tf-test` で初期化からまとめて実行。
+  `tests/` でロールの利用者・Lambdaのログ権限・再試行設定を検証する。
+  全providerをモック化し、planだけで判定するため、AWSの認証情報や本番stateは使わない。
 
 ### planでIAMユーザーの情報取得が拒否された場合
 

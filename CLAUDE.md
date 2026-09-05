@@ -10,7 +10,7 @@ MLBの順位表をX（Twitter）に投稿するボット。AWS Lambdaで実行�
 - **masterへ直接pushしない。** PRとCIの `build-and-test` 通過が必須。管理者にもbranch protectionが適用される。
 - **masterへのマージは本番デプロイにつながる。** 対象ファイルと検証内容は後述の「CI・デプロイ」を確認する。
 - **APIキーや環境固有値をgit管理ファイルに書かない。** 保存先とclone後の設定は「認証情報・環境固有値」を参照する。
-- **`terraform apply` / `terraform destroy` は人間が実行する。** エージェントは `plan`・`validate`・`fmt` までとし、適用はレビュー後に人間が `infra/environments/prod` で行う。
+- **`terraform apply` / `terraform destroy` は人間が実行する。** `make tf-apply` など、間接的に呼ぶ場合も同じ。エージェントは `plan`・`validate`・`fmt` までとし、適用はレビュー後に人間が行う。ルートのMakefileは、Git管理外の `.env` の `TF_AWS_PROFILE` だけを読み取る。`.env` 全体をsource・eval・includeしてはいけない（[使い方](infra/README.md#日常の使い方)）。
 - **`infra/` 配下の変更は勝手にコミットしない。** `.tf` を含むファイル内容をユーザーが確認し、明示的にコミットを指示した場合に限る。
 - **GitHub Actionsの `uses:` はフルcommit SHAとバージョンコメントで固定する。** タグだけの指定は使わず、`pin-github-actions` skillに従う。
 
@@ -188,7 +188,7 @@ PR検証の `ci.yml` とデプロイ前検証の `lambda_deploy.yml` は、共�
 
 masterへの変更は、`lambda_deploy.yml` のverifyで検証・Releaseビルド・パッケージを行い、その実行の成果物だけをdeployジョブでLambdaへ配置する。
 ビルド側には本番認証情報・OIDC発行権限を与えない。deploy側ではリポジトリをcheckoutせず、master以外の手動実行も拒否する。シェルの引数は環境変数で受けて引用し、式を直接埋め込まない。
-Markdown・`.github/`・`.claude/`・`.agents/`・`.codex/`・`.vscode/`・`.gitignore`・`infra/` だけの変更は自動デプロイの対象外。
+Markdown・`.github/`・`.claude/`・`.agents/`・`.codex/`・`.vscode/`・`.gitignore`・`Makefile`・`.env.example`・`infra/` だけの変更は自動デプロイの対象外。
 正確な対象は[ワークフローのpaths-ignore](.github/workflows/lambda_deploy.yml)を参照する。
 
 GitHub Actionsの依存更新はDependabotが月次で1つのPRにまとめる。
