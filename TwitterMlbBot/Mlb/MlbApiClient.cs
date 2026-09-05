@@ -29,7 +29,8 @@ namespace TwitterMlbBot.Mlb
             // APIキーはURIに含めずヘッダーで渡す（URIがログや例外メッセージに出てもキーが漏れないようにする）
             request.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
 
-            // 通信後はデータ変換とログ出力だけなので、各awaitで呼び出し元の同期コンテキストに戻る必要はない。
+            // 通信後のデータ変換とログ出力は、呼び出し元と同じスレッドで行う必要がない。
+            // 処理を再開する場所を呼び出し元に合わせるためだけの待ち時間や負担を避ける。
             using HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {

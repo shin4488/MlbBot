@@ -25,7 +25,8 @@ namespace TwitterMlbBot.Mlb
         public async Task<SeasonCalendar> GetSeasonCalendarAsync(int year)
         {
             string endpoint = string.Format(CultureInfo.InvariantCulture, endpointFormat, year);
-            // 通信後はデータ変換とログ出力だけなので、各awaitで呼び出し元の同期コンテキストに戻る必要はない。
+            // 通信後のデータ変換とログ出力は、呼び出し元と同じスレッドで行う必要がない。
+            // 処理を再開する場所を呼び出し元に合わせるためだけの待ち時間や負担を避ける。
             using HttpResponseMessage response = await client.GetAsync(endpoint).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
