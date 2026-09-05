@@ -1,0 +1,3 @@
+# フックを有効にする。初回はプロジェクトと /hooks の信頼設定が必要。
+[features]
+hooks = true
