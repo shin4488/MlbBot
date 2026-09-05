@@ -11,17 +11,14 @@ namespace TwitterMlbBot.Mlb
     /// </summary>
     internal class MlbStatsApiClient : ISeasonCalendarProvider
     {
-        private static readonly HttpClient client = new HttpClient()
-        {
-            // Lambdaタイムアウトより先に打ち切り、原因を特定しやすくする
-            Timeout = TimeSpan.FromSeconds(10),
-        };
+        private readonly HttpClient client;
         // sportId=1 はMLBの指定（Stats APIはマイナーリーグ等も扱うため必須）
         private static readonly string endpointFormat = "https://statsapi.mlb.com/api/v1/seasons/{0}?sportId=1";
         private readonly ILogger<MlbStatsApiClient> logger;
 
-        public MlbStatsApiClient(ILogger<MlbStatsApiClient> logger)
+        public MlbStatsApiClient(HttpClient client, ILogger<MlbStatsApiClient> logger)
         {
+            this.client = client;
             this.logger = logger;
         }
 
@@ -32,12 +29,12 @@ namespace TwitterMlbBot.Mlb
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                // 取得失敗時は投稿可否を判断できないため異常終了させ、エラーアラーム（メール通知）につなげる
-                throw new MlbApiException(response.StatusCode, responseBody);
+                // クライアントは取得失敗だけを伝える。投稿続行や通知の判断は実行側の方針に委ねる
+                throw new MlbApiException($"{year}年のシーズン日程", response.StatusCode, responseBody);
             }
 
             SeasonCalendar calendar = ParseSeasonCalendar(responseBody, year);
-            this.logger.LogInformation(
+            logger.LogInformation(
                 "Season calendar fetched: {Year} regular season ends {EndDate}", year, calendar.RegularSeasonEndDate);
             return calendar;
         }
@@ -47,21 +44,59 @@ namespace TwitterMlbBot.Mlb
         /// </summary>
         internal static SeasonCalendar ParseSeasonCalendar(string responseBody, int year)
         {
-            SeasonsResponse? parsed = JsonSerializer.Deserialize<SeasonsResponse>(responseBody);
-            string? endDate = parsed?.Seasons?.FirstOrDefault()?.RegularSeasonEndDate;
-            if (string.IsNullOrEmpty(endDate))
+            try
             {
-                // 日程が不明のまま投稿可否を判断しない（黙って止まる・止まらないどちらの誤動作も避け、エラー通知に倒す）
-                throw new InvalidOperationException($"{year}年のレギュラーシーズン終了日をStats APIレスポンスから取得できませんでした。");
+                SeasonsResponse parsed = JsonSerializer.Deserialize<SeasonsResponse>(responseBody)
+                    ?? throw new InvalidOperationException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
+
+                SeasonResponse season = parsed.GetSeason(year);
+                return season.ToSeasonCalendar(year);
             }
-            return new SeasonCalendar(DateOnly.ParseExact(endDate, "yyyy-MM-dd", CultureInfo.InvariantCulture));
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException($"MLB公式の{year}年の日程情報を読み取れないため、シーズン終了を判断できません。", exception);
+            }
         }
 
         // Stats APIレスポンスの形（このクライアント内だけの転送用の型。ドメインにはSeasonCalendarへ変換して渡す）
         private sealed record SeasonsResponse(
-            [property: JsonPropertyName("seasons")] List<SeasonResponse>? Seasons);
+            [property: JsonPropertyName("seasons")] List<SeasonResponse?>? Seasons)
+        {
+            public SeasonResponse GetSeason(int year)
+            {
+                // 終了日の年だけでは、どのシーズンの日程かは確認できない。
+                // 応答順に依存せずシーズンIDで選び、複数候補があれば推測せず取得失敗にする。
+                string seasonId = year.ToString(CultureInfo.InvariantCulture);
+                SeasonResponse[] matchingSeasons = Seasons?.OfType<SeasonResponse>()
+                    .Where(season => season.SeasonId == seasonId).ToArray() ?? [];
+                bool canIdentifySeason = matchingSeasons.Length == 1;
+                if (!canIdentifySeason)
+                {
+                    throw new InvalidOperationException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
+                }
+
+                return matchingSeasons[0];
+            }
+        }
 
         private sealed record SeasonResponse(
-            [property: JsonPropertyName("regularSeasonEndDate")] string? RegularSeasonEndDate);
+            [property: JsonPropertyName("seasonId")] string? SeasonId,
+            [property: JsonPropertyName("regularSeasonEndDate")] DateOnly? RegularSeasonEndDate)
+        {
+            public SeasonCalendar ToSeasonCalendar(int year)
+            {
+                DateOnly endDate = RegularSeasonEndDate
+                    ?? throw new InvalidOperationException($"MLB公式の日程情報に{year}年のレギュラーシーズン終了日が記載されていません。");
+                bool isRequestedSeason = endDate.Year == year;
+                // 別の年の日程による誤った投稿停止を防ぐため、この応答は取得失敗として扱う。
+                // BotRunnerの日程取得失敗時の方針に従い、シーズン中でありうる時期は投稿を続ける。
+                if (!isRequestedSeason)
+                {
+                    throw new InvalidOperationException($"対象は{year}年ですが、取得した終了日が{endDate.Year}年になっているため、シーズン終了を判断できません。");
+                }
+
+                return new SeasonCalendar(endDate);
+            }
+        }
     }
 }

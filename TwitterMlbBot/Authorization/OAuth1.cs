@@ -44,11 +44,11 @@ namespace TwitterMlbBot.Authorization
         /// <param name="endpoint">リクエスト先URL（クエリ文字列なし）</param>
         public string CreateAuthorizationData(string endpoint)
         {
-            string timestamp = this.timestampProvider();
-            string nonce = this.nonceProvider();
-            string signatureBase64 = this.CreateSignature(endpoint, "POST", nonce, timestamp);
-            return $@"oauth_consumer_key=""{Uri.EscapeDataString(this.consumerKey)}""" +
-                    $@",oauth_token=""{Uri.EscapeDataString(this.accessKey)}""" +
+            string timestamp = timestampProvider();
+            string nonce = nonceProvider();
+            string signatureBase64 = CreateSignature(endpoint, "POST", nonce, timestamp);
+            return $@"oauth_consumer_key=""{Uri.EscapeDataString(consumerKey)}""" +
+                    $@",oauth_token=""{Uri.EscapeDataString(accessKey)}""" +
                     $@",oauth_signature_method=""HMAC-SHA1""" +
                     $@",oauth_timestamp=""{Uri.EscapeDataString(timestamp)}""" +
                     $@",oauth_nonce=""{Uri.EscapeDataString(nonce)}""" +
@@ -62,11 +62,11 @@ namespace TwitterMlbBot.Authorization
             // （OAuth 1.0aの署名対象になるのは application/x-www-form-urlencoded のボディだけ）
             var parameters = new Dictionary<string, string>
             {
-                { "oauth_consumer_key", this.consumerKey },
+                { "oauth_consumer_key", consumerKey },
                 { "oauth_nonce", nonce },
                 { "oauth_signature_method", "HMAC-SHA1" },
                 { "oauth_timestamp", timestamp },
-                { "oauth_token", this.accessKey },
+                { "oauth_token", accessKey },
                 { "oauth_version", "1.0" },
             };
 
@@ -75,8 +75,8 @@ namespace TwitterMlbBot.Authorization
                 Uri.EscapeDataString(url) + "&" +
                 Uri.EscapeDataString(CombineQueryParams(parameters));
             string compositeKey =
-                Uri.EscapeDataString(this.consumerSecret) + "&" +
-                Uri.EscapeDataString(this.accessSecret);
+                Uri.EscapeDataString(consumerSecret) + "&" +
+                Uri.EscapeDataString(accessSecret);
             using var hasher = new HMACSHA1(Encoding.ASCII.GetBytes(compositeKey));
             return Convert.ToBase64String(hasher.ComputeHash(Encoding.ASCII.GetBytes(signatureBaseString)));
         }

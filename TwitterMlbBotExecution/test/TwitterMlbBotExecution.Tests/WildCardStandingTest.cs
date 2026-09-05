@@ -10,6 +10,26 @@ namespace TwitterMlbBotExecution.Tests;
 /// </summary>
 public class WildCardStandingTest
 {
+    [Fact]
+    public void FromDivisions_地区首位しか存在しなければワイルドカードは空になる()
+    {
+        Assert.Empty(FromTeams(
+            Teams.Create("AL", "East", "First", 90, 50),
+            Teams.Create("AL", "West", "Second", 80, 60)));
+    }
+
+    [Fact]
+    public void FromDivisions_候補が3チーム未満なら不明なボーダーとの差を作らない()
+    {
+        var wildCard = Assert.Single(FromTeams(
+            Teams.Create("AL", "East", "Leader", 90, 50),
+            Teams.Create("AL", "East", "Second", 80, 60),
+            Teams.Create("AL", "East", "Third", 70, 70)));
+
+        Assert.Equal(2, wildCard.RankedTeams.Count);
+        Assert.All(wildCard.RankedTeams, ranked => Assert.Equal(0, ranked.GamesBehind));
+    }
+
     private static IReadOnlyList<WildCardStanding> FromTeams(params TeamStanding[] teams)
     {
         return WildCardStanding.FromDivisions(DivisionStanding.FromStandings(teams));

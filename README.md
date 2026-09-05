@@ -1,108 +1,134 @@
 # MLB bot
 
-MLBの順位表を毎日X（Twitter）に自動投稿するボット。投稿先: [@MLBbot2](https://twitter.com/MLBbot2)
+MLBの順位表をXへ自動投稿するボットです。投稿先: [@MLBbot2](https://twitter.com/MLBbot2)
 
-## アーキテクチャ
+## プログラムの構成
 
-### 実行環境
+本体は `TwitterMlbBot/` にあります。Lambdaからの呼び出しだけ、別プロジェクトの `TwitterMlbBotExecution/` で受け付けます。
+
+### 起動から実行まで
 
 ```mermaid
 flowchart LR
-    EB["EventBridge<br>CronTweetMlbStandings<br>毎日 06:00 UTC（15:00 JST）"] --> L["AWS Lambda<br>TwitterMlbBot (dotnet10)"]
-    L --> SA["statsapi.mlb.com<br>シーズン日程取得<br>（終了後は投稿せず終了）"]
-    L --> MLB["sportsdata.io<br>MLB順位データ取得"]
-    L --> X["X API v2<br>地区6件＋WC2件（8月以降）を投稿"]
+    F["Function<br>EventBridgeからAWS Lambdaで起動<br>本体を呼び出す"] --> P["Program.Main<br>取得・送信などに使うクラスを用意する"]
+    P --> O["RunOptions<br>起動引数を読み取る"]
+    P --> R["BotRunner.RunAsync<br>日程確認 → 順位取得 → 文面作成 → 送信<br>投稿するか、エラー時に続けるかを判断する"]
+    click F "TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
+    click P "TwitterMlbBot/Program.cs"
+    click O "TwitterMlbBot/RunOptions.cs"
+    click R "TwitterMlbBot/BotRunner.cs"
 ```
 
-### 内部構造
+EventBridgeのルール名・実行時刻・Lambdaで使う.NETのバージョンは、[Terraformの設定](infra/environments/prod/main.tf)で確認できます。
 
-「取得 → 文面組み立て → 送信」を分離し、取得元と送信先はinterfaceで差し替え可能にしている（テスト用フェイク・ドライランは送信先の差し替えで実現）。
+### 日程と順位の取得
+
+取得元と送信先にはインターフェースを使い、テストでは実際のAPIに接続しない処理に差し替えます。
 
 ```mermaid
-flowchart TB
-    F["TwitterMlbBotExecution.Function<br>Lambdaハンドラ（薄いラッパー）"] --> P
-    P["Program.Main<br>引数解析（RunOptions）と依存関係の組み立てのみ"] --> R["BotRunner.RunAsync<br>シーズン判定 → 取得 → 組み立て → 送信 の流れだけを持つ"]
-
-    R --> ISC([ISeasonCalendarProvider])
-    R --> ISP([IStandingsProvider])
-    R --> TC
-    R --> ITS([ITweetSender])
-
-    subgraph mlb["取得・ドメインモデル（Mlb/）"]
-        ISC -.実装.-> MSC["MlbStatsApiClient<br>statsapi.mlb.com（公式・認証不要）"]
-        MSC --> SC["SeasonCalendar（不変record）<br>シーズン終了判定のルールを保持"]
-        ISP -.実装.-> MAC["MlbApiClient<br>sportsdata.io / キーはヘッダー送信<br>All-Star擬似チームはここで除外"]
-        MAC --> TS["TeamStanding（不変record）<br>勝率・ゲーム差・順位付け規則を保持"]
-        DS["DivisionStanding / WildCardStanding<br>順位表。順位順（RankedTeam）を型で保証"] --> TS
-    end
-
-    subgraph composing["文面組み立て（Composing/）<br>ネットワーク・設定に依存しない純粋ロジック"]
-        TC["TweetComposer<br>文面の見た目だけに責任を持つ"] --> HP["HashtagProvider<br>公式タグマップ"]
-        TC --> TCN["TweetContent（値オブジェクト）<br>280字上限の知識を持つ"]
-    end
-    R --> DS
-    DS --> TC
-
-    subgraph twitter["送信（Twitter/）"]
-        ITS -.実装.-> TAS["TwitterApiSender<br>X API v2 + OAuth1.0a署名"]
-        ITS -.実装.-> DRS["DryRunTweetSender<br>コンソール出力（ドライラン時）"]
-    end
+flowchart LR
+    ISC["ISeasonCalendarProvider<br>日程を取得するインターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 statsapi.mlb.com<br>認証不要・対象年の日程を特定"]
+    MSC -->|取得結果| SC["SeasonCalendar<br>日程を保持する変更不可のrecord<br>シーズン終了後かどうかを判定する"]
+    ISP["IStandingsProvider<br>順位を取得するインターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io<br>APIキーはHTTPヘッダーで送信<br>All-Star用の擬似チームを除外<br>全地区の球団構成を検証"]
+    MAC -->|取得結果| TS["TeamStanding<br>成績を保持する変更不可のrecord<br>勝率・ゲーム差・順位付けの計算"]
+    TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカードの順位表<br>各チームをRankedTeamとして順位順に保持"]
+    click ISC "TwitterMlbBot/Mlb/ISeasonCalendarProvider.cs"
+    click MSC "TwitterMlbBot/Mlb/MlbStatsApiClient.cs"
+    click SC "TwitterMlbBot/Mlb/SeasonCalendar.cs"
+    click ISP "TwitterMlbBot/Mlb/IStandingsProvider.cs"
+    click MAC "TwitterMlbBot/Mlb/MlbApiClient.cs"
+    click TS "TwitterMlbBot/Mlb/TeamStanding.cs"
+    click DS "TwitterMlbBot/Mlb/"
 ```
 
-## ローカルセットアップ
+### 文面の作成と投稿
 
-必要なもの: .NET 10 SDK（使用バージョンは [global.json](global.json) で10.0系に固定している）
+文面の作成では通信や環境変数を使いません。送信先を差し替えることで、同じ文面をXに投稿することも、ドライランで確認することもできます。
+
+```mermaid
+flowchart LR
+    C["TweetComposer<br>投稿の種類・件数・時期を決める<br>地区・ワイルドカードの文面を作る"] -->|タグを取得| H["HashtagProvider<br>チーム名と公式タグの対応表"]
+    C -->|文面を作成| T["TweetContent<br>文面を表す値オブジェクト<br>文字数と上限超過を判定する"]
+    T --> I["ITweetSender<br>送信先のインターフェース"]
+    I -->|Xへ投稿| X["TwitterApiSender<br>X API v2に送信する"]
+    X -->|リクエストに署名| A["OAuth1<br>OAuth 1.0aによる認証"]
+    I -->|ドライラン| D["DryRunTweetSender<br>コンソールに文面を表示する"]
+    click C "TwitterMlbBot/Composing/TweetComposer.cs"
+    click H "TwitterMlbBot/Composing/HashtagProvider.cs"
+    click T "TwitterMlbBot/Composing/TweetContent.cs"
+    click I "TwitterMlbBot/Twitter/ITweetSender.cs"
+    click X "TwitterMlbBot/Twitter/TwitterApiSender.cs"
+    click A "TwitterMlbBot/Authorization/OAuth1.cs"
+    click D "TwitterMlbBot/Twitter/DryRunTweetSender.cs"
+```
+
+## 手元のPCで実行する
+
+[global.jsonで指定している.NET SDK](global.json)をインストールし、環境変数 `MLB_API_KEY` にAPIキーを設定します。
 
 ```bash
 dotnet build MlbBot.sln
-```
-
-設定値はローカル・Lambda共通で**環境変数**で渡す:
-
-| 環境変数 | 内容 |
-|---|---|
-| `MLB_API_KEY` | sportsdata.io のAPIキー |
-| `CONSUMER_KEY` | X API Consumer Key |
-| `CONSUMER_SECRET` | X API Consumer Secret |
-| `ACCESS_KEY` | X API Access Token |
-| `ACCESS_SECRET` | X API Access Token Secret |
-| `DRY_RUN`（任意） | `true` でドライラン |
-
-必須の環境変数が未設定の場合は、変数名入りのエラーで起動時に失敗する（ドライランで必須なのは `MLB_API_KEY` のみ）。
-
-## 実行方法
-
-通常送信（実ツイート）はLambdaの定期実行経由のみとする。ローカルではドライランで文面を確認する。
-
-### ドライラン（ツイートせず文面だけ確認する）
-
-`--dry-run` 引数、または環境変数 `DRY_RUN=true` で、ツイートせずに文面をコンソール出力する。
-ドライラン時はX APIの認証情報を読み込まないため、`MLB_API_KEY` だけで動く。
-
-```bash
+dotnet test MlbBot.sln
 MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 ```
 
-- VSCode: launch構成「TwitterMlbBot (dry-run / ツイートしない)」を実行
-- 出力例: `----- dry-run: 以下はツイートされません（xx文字） -----` に続けて各地区の文面
+`xxx` は手元のAPIキーに置き換えてください。Xへの投稿はLambdaの定期実行に限り、手元のPCでは投稿せずに文面だけを確認するドライランを使います。
 
-## ⚠️ 注意事項
+| 実行方法 | 出力先 | 必要な認証情報 |
+|---|---|---|
+| `--dry-run` / `DRY_RUN=true` | コンソール | MLBのみ |
+| Lambdaの定期実行 | X | MLBとX |
 
-1. **masterへのマージは本番デプロイ**。[.github/workflows/lambda_deploy.yml](.github/workflows/lambda_deploy.yml) により、ビルド・フォーマット・テスト検証後にAWS Lambdaへ自動デプロイされる（`.md`・`.github/`・`.claude/`・`.vscode/`・`.gitignore`・`infra/` のみの変更は除く）。masterはbranch protectionで保護されており、直pushは拒否される（PR + CIチェック `build-and-test` の通過が必須）。
-2. **`FunctionTest` は手動疎通確認専用**。本番の `Program.Main` をそのまま実行するためSkip指定してある。Skipを外して実行すると実際にツイートが投稿される。
-3. **シークレットをコミットしない**。APIキーは環境変数でのみ扱い、リポジトリ内のファイルには書かない。
+VSCodeでは、実行構成 **TwitterMlbBot (dry-run / ツイートしない)** を選択してください。
+コードを変更した後は `dotnet format MlbBot.sln` で整形します。
 
-## デプロイに必要な設定
+ドライランでは、次の見出しに続いて各順位表の文面が表示されます。
 
-GitHub Secrets（Actionsデプロイ用。認証はOIDCで長期キーは使わない）:
+```text
+----- dry-run: 以下はツイートされません（xx文字） -----
+```
 
-- `AWS_DEPLOY_ROLE_ARN` … OIDCでAssumeするデプロイ用IAMロールのARN
-- `AWS_REGION` … デプロイ先のAWSリージョン
-- `AWS_LAMBDA_FUNCTION_NAME` … デプロイ先Lambda関数名
+### 環境変数（ローカル・Lambda共通）
 
-Lambda環境変数（実行時）: `MLB_API_KEY`, `CONSUMER_KEY`, `CONSUMER_SECRET`, `ACCESS_KEY`, `ACCESS_SECRET`
+| 変数 | 用途 | 必要な場面 |
+|---|---|---|
+| `MLB_API_KEY` | sportsdata.io APIキー | すべて |
+| `CONSUMER_KEY` | X Consumer Key | Xへ投稿するとき |
+| `CONSUMER_SECRET` | X Consumer Secret | Xへ投稿するとき |
+| `ACCESS_KEY` | X Access Token | Xへ投稿するとき |
+| `ACCESS_SECRET` | X Access Token Secret | Xへ投稿するとき |
+| `DRY_RUN` | `true` でドライラン | 任意 |
 
-## 改善計画ドキュメント
+必要な環境変数が未設定の場合は、起動時に変数名を含むエラーを表示して終了します。ドライランではXの認証情報を読み込みません。
 
-- [docs/tweet-content-ideas.md](docs/tweet-content-ideas.md) … ツイート文面の改善案
-- [infra/README.md](infra/README.md) … インフラ構成（Terraform）の使い方と残タスク
+## デプロイ
+
+```mermaid
+flowchart LR
+    PR["PR"] --> CI["ビルド・整形・テスト"]
+    CI --> M["masterへマージ"]
+    M --> L["Lambdaへ自動デプロイ"]
+```
+
+| GitHub Secret | 用途 |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | OIDC認証で使用するIAMロールのARN |
+| `AWS_REGION` | デプロイ先リージョン |
+| `AWS_LAMBDA_FUNCTION_NAME` | デプロイ先Lambda名 |
+
+GitHub ActionsはOIDCで一時的な認証情報を取得するため、長期アクセスキーは使いません。Lambdaにも、上記の表で「Xへ投稿するとき」に必要な変数と `MLB_API_KEY` を設定します。
+
+変更してもデプロイが実行されないファイルやディレクトリは、[ワークフローの `paths-ignore`](.github/workflows/lambda_deploy.yml)で確認できます。
+
+### 運用上の注意
+
+- masterへマージすると本番に反映されます。ブランチ保護により直接pushできないため、PRを作成し、CIチェック `build-and-test` を通す必要があります。
+- `FunctionTest` は、本番の `Program.Main` を直接呼んで接続を確認するためのテストです。Skipを解除すると実際に投稿されるため、他のテストとまとめて実行しないでください。
+- APIキーは環境変数で管理し、ファイルに書いてコミットしないでください。
+
+## 関連ドキュメント
+
+| 文書 | 内容 |
+|---|---|
+| [ツイート改善案](docs/tweet-content-ideas.md) | 文面の改善や、掲載する情報の追加案 |
+| [インフラ管理](infra/README.md) | Terraformの構成・運用手順・今後の対応 |

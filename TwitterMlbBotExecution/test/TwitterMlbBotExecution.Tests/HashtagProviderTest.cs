@@ -31,6 +31,36 @@ public class HashtagProviderTest
     }
 
     [Fact]
+    public void GetHashtags_渡した辞書を後で書き換えてもタグは変わらない()
+    {
+        var source = new Dictionary<string, string> { { "Example", "OriginalTag" } };
+        var provider = new HashtagProvider(source);
+
+        source["Example"] = "ChangedTag";
+        source.Clear();
+
+        Assert.Equal("#OriginalTag #Example", provider.GetHashtags("Example"));
+    }
+
+    [Fact]
+    public void 共有する公式タグマップは書き込み用のAPIからも変更できない()
+    {
+        // 共有データを変更する試み自体が他テストへ影響しないよう、書き込み可否だけを確認する
+        if (HashtagProvider.OfficialHashtagMap is IDictionary<string, string> map)
+        {
+            Assert.True(map.IsReadOnly);
+        }
+    }
+
+    [Fact]
+    public void GetHashtags_チーム名の大文字小文字で公式タグの対応が変わらない()
+    {
+        var provider = new HashtagProvider(new Dictionary<string, string> { { "Example", "OfficialTag" } });
+
+        Assert.Contains("#OfficialTag", provider.GetHashtags("example"));
+    }
+
+    [Fact]
     public void GetHashtags_公式タグがあるチームは公式タグと元チーム名タグの両方を返す()
     {
         var provider = new HashtagProvider(new Dictionary<string, string> { { "Red Sox", "DirtyWater" } });

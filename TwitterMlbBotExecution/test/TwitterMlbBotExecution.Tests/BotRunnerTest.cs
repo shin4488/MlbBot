@@ -28,7 +28,7 @@ public class BotRunnerTest
         public Task<IReadOnlyList<TeamStanding>> GetStandingsAsync(int year)
         {
             CallCount++;
-            return Task.FromResult<IReadOnlyList<TeamStanding>>(this.standings);
+            return Task.FromResult<IReadOnlyList<TeamStanding>>(standings);
         }
     }
 
@@ -43,7 +43,7 @@ public class BotRunnerTest
 
         public Task<SeasonCalendar> GetSeasonCalendarAsync(int year)
         {
-            return Task.FromResult(this.getResult());
+            return Task.FromResult(getResult());
         }
     }
 
@@ -62,7 +62,7 @@ public class BotRunnerTest
         public Task<bool> SendAsync(TweetContent tweetContent)
         {
             SentContents.Add(tweetContent.Text);
-            return Task.FromResult(this.sendResult(tweetContent.Text));
+            return Task.FromResult(sendResult(tweetContent.Text));
         }
     }
 

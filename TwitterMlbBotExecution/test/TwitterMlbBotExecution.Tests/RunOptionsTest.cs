@@ -9,6 +9,14 @@ namespace TwitterMlbBotExecution.Tests;
 /// </summary>
 public class RunOptionsTest
 {
+    [Theory]
+    [InlineData("false")]
+    [InlineData("")]
+    public void Parse_環境変数がtrueでなくても明示したdryRun引数を優先する(string environmentValue)
+    {
+        Assert.True(RunOptions.Parse(new[] { "2026", "--dry-run" }, environmentValue, seasonUtcNow).DryRun);
+    }
+
     private static readonly DateTime seasonUtcNow = new DateTime(2026, 8, 29, 6, 0, 0, DateTimeKind.Utc);
 
     [Fact]

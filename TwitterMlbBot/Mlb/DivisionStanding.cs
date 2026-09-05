@@ -26,7 +26,8 @@ namespace TwitterMlbBot.Mlb
         {
             League = league;
             Division = division;
-            RankedTeams = rankedTeams;
+            // 順位順という不変条件を、受け取り側によるリストの書き換えからも守る
+            RankedTeams = rankedTeams.ToList().AsReadOnly();
         }
 
         /// <summary>
@@ -41,7 +42,7 @@ namespace TwitterMlbBot.Mlb
                 .Select(teams =>
                 {
                     // APIレスポンスの並び順には依存せず、自前の順位付け規則で並べる
-                    List<TeamStanding> ordered = TeamStanding.OrderByRank(teams).ToList();
+                    IReadOnlyList<TeamStanding> ordered = TeamStanding.OrderByRank(teams);
                     TeamStanding leader = ordered[0];
                     return new DivisionStanding(
                         teams.Key.League,
@@ -50,7 +51,7 @@ namespace TwitterMlbBot.Mlb
                             .Select((team, index) => new RankedTeam(index + 1, team, team.GamesBehind(leader)))
                             .ToList());
                 })
-                .ToList();
+                .ToList().AsReadOnly();
         }
     }
 }
