@@ -7,14 +7,22 @@ on:
 permissions:
   contents: read
 
+# 同じPRの古い検証を打ち切り、連続pushでランナーを使い続けない。
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   # ジョブ名はbranch protectionの必須チェック名として参照されているため変更しない
   build-and-test:
+    name: build-and-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build, format check and test
         uses: ./.github/actions/verify-dotnet
