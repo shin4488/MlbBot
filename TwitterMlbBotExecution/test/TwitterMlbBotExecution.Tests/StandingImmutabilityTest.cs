@@ -33,6 +33,8 @@ public class StandingImmutabilityTest
         AssertCannotChange(TeamStanding.OrderByRank(source));
         AssertCannotChange(divisions);
         AssertCannotChange(WildCardStanding.FromDivisions(divisions));
+        AssertCannotChange(MlbApiClient.ParseStandings(
+            StandingsFixture.CreateResponse().ToJsonString()));
     }
 
     private static void AssertCannotChange<T>(IReadOnlyList<T> items)

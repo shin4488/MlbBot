@@ -47,13 +47,56 @@ namespace TwitterMlbBot.Mlb
         /// </summary>
         internal static IReadOnlyList<TeamStanding> ParseStandings(string responseBody)
         {
-            List<StandingResponse> parsed =
-                JsonSerializer.Deserialize<List<StandingResponse>>(responseBody) ?? new List<StandingResponse>();
-            return parsed
-                .Where(standing => !standing.IsAllStarPseudoTeam)
-                .Select(standing => new TeamStanding(
-                    standing.Name ?? "", standing.League ?? "", standing.Division ?? "", standing.Wins, standing.Losses))
-                .ToList();
+            try
+            {
+                List<StandingResponse?> parsed = JsonSerializer.Deserialize<List<StandingResponse?>>(responseBody)
+                    ?? throw new InvalidOperationException("配信元から順位情報が届いていないため、順位表を作成できません。");
+
+                // 一部のチームだけ除外すると順位が変わるため、不正な成績があれば取得全体を失敗にする。
+                List<TeamStanding> standings = parsed
+                    .Select(standing => standing
+                        ?? throw new InvalidOperationException("一部のチームの成績が欠けているため、順位表を作成できません。"))
+                    .Where(standing => !standing.IsAllStarPseudoTeam)
+                    .Select(standing => standing.ToTeamStanding())
+                    .ToList();
+
+                ValidateTeamCoverage(standings);
+                return standings.AsReadOnly();
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("配信元の順位情報を読み取れないため、順位表を作成できません。", exception);
+            }
+        }
+
+        private static void ValidateTeamCoverage(IReadOnlyList<TeamStanding> standings)
+        {
+            // 開幕前の空順位は正常。データがある場合だけ全地区の球団がそろっているかを確かめる。
+            if (standings.Count == 0)
+            {
+                return;
+            }
+
+            bool hasUniqueTeams = standings.Select(team => team.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() == standings.Count;
+            if (!hasUniqueTeams)
+            {
+                throw new InvalidOperationException("同じ球団の成績が重複しているため、順位表を作成できません。");
+            }
+
+            // 件数だけでは「1球団が欠け、別の球団が重複した応答」や所属の誤りを見逃す。
+            // 現行MLBの地区構成も検証し、欠損によって順位・ワイルドカード対象が変わることを防ぐ。
+            const int divisionCount = 6;
+            const int teamsPerDivision = 5;
+            var divisions = standings.GroupBy(team => (team.League, team.Division)).ToArray();
+            bool hasCompleteDivisions = divisions.Length == divisionCount
+                && divisions.All(division => division.Key.League is "AL" or "NL"
+                    && division.Key.Division is "East" or "Central" or "West"
+                    && division.Count() == teamsPerDivision);
+            if (!hasCompleteDivisions)
+            {
+                throw new InvalidOperationException("所属リーグ・地区や球団数がMLBの構成と一致しないため、順位表を作成できません。");
+            }
         }
 
         // APIレスポンスの形（このクライアント内だけの転送用の型。使うフィールドのみ定義し、未定義の項目は無視される）
@@ -61,9 +104,17 @@ namespace TwitterMlbBot.Mlb
             [property: JsonPropertyName("Name")] string? Name,
             [property: JsonPropertyName("League")] string? League,
             [property: JsonPropertyName("Division")] string? Division,
-            [property: JsonPropertyName("Wins")] int Wins,
-            [property: JsonPropertyName("Losses")] int Losses)
+            [property: JsonPropertyName("Wins")] int? Wins,
+            [property: JsonPropertyName("Losses")] int? Losses)
         {
+            public TeamStanding ToTeamStanding()
+            {
+                // API項目の欠落を0勝・0敗で補わない。成績自体の妥当性はTeamStandingが保証する。
+                int wins = Wins ?? throw new InvalidOperationException("勝ち数が記載されていないチームがあるため、順位表を作成できません。");
+                int losses = Losses ?? throw new InvalidOperationException("負け数が記載されていないチームがあるため、順位表を作成できません。");
+                return new TeamStanding(Name ?? string.Empty, League ?? string.Empty, Division ?? string.Empty, wins, losses);
+            }
+
             /// <summary>
             /// All-Star用の擬似チーム（"AL All-Stars" 等）かどうか。
             /// レスポンスには実在の30球団に加えてこの擬似チームが混ざっており、リーグ名と地区名が同一（"AL"/"AL"）になるのが特徴

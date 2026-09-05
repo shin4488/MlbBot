@@ -27,9 +27,9 @@ EventBridgeのルール名・実行時刻・Lambdaで使う.NETのバージョ�
 
 ```mermaid
 flowchart LR
-    ISC["ISeasonCalendarProvider<br>日程を取得するインターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 statsapi.mlb.com<br>認証不要"]
+    ISC["ISeasonCalendarProvider<br>日程を取得するインターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 statsapi.mlb.com<br>認証不要・対象年の日程を特定"]
     MSC -->|取得結果| SC["SeasonCalendar<br>日程を保持する変更不可のrecord<br>シーズン終了後かどうかを判定する"]
-    ISP["IStandingsProvider<br>順位を取得するインターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io<br>APIキーはHTTPヘッダーで送信<br>All-Star用の擬似チームを除外"]
+    ISP["IStandingsProvider<br>順位を取得するインターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io<br>APIキーはHTTPヘッダーで送信<br>All-Star用の擬似チームを除外<br>全地区の球団構成を検証"]
     MAC -->|取得結果| TS["TeamStanding<br>成績を保持する変更不可のrecord<br>勝率・ゲーム差・順位付けの計算"]
     TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカードの順位表<br>各チームをRankedTeamとして順位順に保持"]
     click ISC "TwitterMlbBot/Mlb/ISeasonCalendarProvider.cs"

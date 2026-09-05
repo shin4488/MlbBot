@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using TwitterMlbBot;
 using TwitterMlbBot.Composing;
@@ -17,12 +18,7 @@ public class LocalFlowTest
 {
     private const string calendarJson = """{"seasons":[{"seasonId":"2026","regularSeasonEndDate":"2026-09-27"}]}""";
 
-    private static readonly TeamStanding[] teams = (
-        from league in new[] { "AL", "NL" }
-        from division in new[] { "East", "Central", "West" }
-        from index in Enumerable.Range(0, 5)
-        select new TeamStanding($"{league}-{division}-{index}", league, division, 90 - index, 50 + index)
-    ).ToArray();
+    private static IReadOnlyList<TeamStanding> teams => StandingsFixture.Teams;
 
     private static string StandingsJson => JsonSerializer.Serialize(teams.Concat(new[]
     {
@@ -69,6 +65,56 @@ public class LocalFlowTest
     }
 
     [Theory]
+    [InlineData("null")]
+    // 正しいチームが先にあっても、不完全な順位を一部だけ投稿しない。
+    [InlineData("""[{"Name":"Example","League":"AL","Division":"East","Wins":80,"Losses":60},{}]""")]
+    public async Task 不正な順位応答の場合は何も出力せず失敗する(string standingsJson)
+    {
+        using var output = new StringWriter();
+        using var client = CreateClient(calendarJson, standingsJson);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => CreateRunner(client, new DryRunTweetSender(output))
+            .RunAsync(2026, new DateOnly(2026, 8, 1)));
+
+        Assert.Empty(output.ToString());
+    }
+
+    [Theory]
+    [InlineData("球団欠落")]
+    [InlineData("リーグ欠落")]
+    [InlineData("球団重複")]
+    [InlineData("同数のまま球団重複")]
+    [InlineData("未知のリーグ")]
+    [InlineData("未知の地区")]
+    [InlineData("地区の球団数が不均等")]
+    public async Task 球団構成が不完全な順位表は一部も出力しない(string defect)
+    {
+        JsonArray response = JsonNode.Parse(StandingsJson)!.AsArray();
+        switch (defect)
+        {
+            case "球団欠落": response.RemoveAt(0); break;
+            case "リーグ欠落":
+                foreach (JsonNode? row in response.Where(row => row!["League"]!.GetValue<string>() == "NL").ToArray())
+                {
+                    response.Remove(row);
+                }
+                break;
+            case "球団重複": response.Add(response[0]!.DeepClone()); break;
+            case "同数のまま球団重複": response[1] = response[0]!.DeepClone(); break;
+            case "未知のリーグ": response[0]!["League"] = "UNKNOWN"; break;
+            case "未知の地区": response[0]!["Division"] = "UNKNOWN"; break;
+            case "地区の球団数が不均等": response[0]!["Division"] = "West"; break;
+        }
+        using var output = new StringWriter();
+        using var client = CreateClient(calendarJson, response.ToJsonString());
+
+        await Assert.ThrowsAnyAsync<Exception>(() => CreateRunner(client, new DryRunTweetSender(output))
+            .RunAsync(2026, new DateOnly(2026, 8, 1)));
+
+        Assert.Empty(output.ToString());
+    }
+
+    [Theory]
     [InlineData(2, 28, 0)]
     [InlineData(3, 1, 6)]
     [InlineData(10, 31, 8)]
@@ -82,6 +128,20 @@ public class LocalFlowTest
         await CreateRunner(client, sender).RunAsync(2026, new DateOnly(2026, month, day));
 
         Assert.Equal(expectedCount, sender.Contents.Count);
+    }
+
+    [Theory]
+    [InlineData("""{"seasons":[{"seasonId":"2026","regularSeasonEndDate":"2025-09-27"}]}""")]
+    [InlineData("""{"seasons":[{"seasonId":"2025","regularSeasonEndDate":"2026-09-27"}]}""")]
+    [InlineData("""{"seasons":[{"seasonId":"2026","regularSeasonEndDate":"2026-06-30"},{"seasonId":"2026","regularSeasonEndDate":"2026-09-27"}]}""")]
+    public async Task 対象シーズンの日程が不確かなときは終了済みと誤判定せず取得失敗として扱う(string calendar)
+    {
+        using var output = new StringWriter();
+        using var client = CreateClient(calendar, StandingsJson);
+
+        await CreateRunner(client, new DryRunTweetSender(output)).RunAsync(2026, new DateOnly(2026, 7, 1));
+
+        Assert.All(teams, team => Assert.Contains(team.Name, output.ToString()));
     }
 
     private static BotRunner CreateRunner(HttpClient client, ITweetSender sender) => new(

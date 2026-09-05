@@ -23,15 +23,14 @@ public class ApiTransportTest
             Assert.Equal(dummyKey, Assert.Single(request.Headers.GetValues("Ocp-Apim-Subscription-Key")));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("""[{"Name":"Example","League":"AL","Division":"East","Wins":82,"Losses":53}]"""),
+                Content = new StringContent(StandingsFixture.CreateResponse().ToJsonString()),
             });
         }));
         var provider = new MlbApiClient(client, dummyKey, NullLogger<MlbApiClient>.Instance);
 
-        var team = Assert.Single(await provider.GetStandingsAsync(2026));
+        var teams = await provider.GetStandingsAsync(2026);
 
-        Assert.Equal("Example", team.Name);
-        Assert.Equal(82, team.Wins);
+        Assert.Equal(StandingsFixture.Teams, teams);
         // 接続を他APIとも共有できるよう、認証情報を共通ヘッダーに残さない
         Assert.False(client.DefaultRequestHeaders.Contains("Ocp-Apim-Subscription-Key"));
     }
