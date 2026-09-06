@@ -1,207 +1,63 @@
 # 開発ガイド（Claude Code / Codex / Gemini共通）
 
-MLBの順位表をX（Twitter）に投稿するボット。AWS Lambdaで実行する。
-`AGENTS.md` はこのファイルへのシンボリックリンクなので、共通の指示はここを編集する。
+MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Program.cs](TwitterMlbBot/Program.cs)、実行判断は [BotRunner.cs](TwitterMlbBot/BotRunner.cs)、Lambdaの入口・テストは `TwitterMlbBotExecution/`。構成図は [README](README.md#プログラムの構成)。
 
-## 作業時に守ること
+## 必ず守ること
 
-- **ローカルの動作確認はドライランで行う。** 通常モードでは実際に投稿される。
-- **`FunctionTest` のSkipを外したままテストを一括実行しない。** 本番の `Program.Main` を呼ぶため、手動の疎通確認専用とする。
-- **masterへ直接pushしない。** PRとCIの `build-and-test` 通過が必須。管理者にもbranch protectionが適用される。
-- **masterへのマージは本番デプロイにつながる。** 対象ファイルと検証内容は後述の「CI・デプロイ」を確認する。
-- **APIキーや環境固有値をgit管理ファイルに書かない。** 保存先とclone後の設定は「認証情報・環境固有値」を参照する。
-- **`terraform apply` / `terraform destroy` は人間が実行する。** `make tf-apply` など、間接的に呼ぶ場合も同じ。エージェントは `plan`・`validate`・`fmt` までとし、適用はレビュー後に人間が行う。ルートのMakefileは、Git管理外の `.env` の `TF_AWS_PROFILE` だけを読み取る。`.env` 全体をsource・eval・includeしてはいけない（[使い方](infra/README.md#日常の使い方)）。
-- **`infra/` 配下の変更は勝手にコミットしない。** `.tf` を含むファイル内容をユーザーが確認し、明示的にコミットを指示した場合に限る。
-- **GitHub Actionsの `uses:` はフルcommit SHAとバージョンコメントで固定する。** タグだけの指定は使わず、`pin-github-actions` skillに従う。
+- **ローカル確認はドライランのみ。** 通常モードは実投稿する。`FunctionTest` は本番の `Program.Main` を呼ぶ手動疎通専用で、**Skipを外したままテストを一括実行しない**。
+- **masterへ直接pushしない。** 管理者にもbranch protectionが適用され、PRとCIの `build-and-test` 通過が必須。masterへのマージは本番デプロイにつながる。対象は [ワークフロー](.github/workflows/lambda_deploy.yml) の `paths-ignore` を確認する。
+- **APIキー・環境固有値をgit管理ファイルに書かない。** 設定は環境変数、ローカルの環境固有値はGit管理外のファイルに置く。設定例は実値への変更なしでは必ず失敗する `.example` のみ。コミット前にgitleaks・git-secretsで混入を確認する。
+- **`terraform apply` / `terraform destroy` はレビュー後に人間が実行する。** `make` 経由も同じ。エージェントは `plan`・`validate`・`fmt` まで。Makefileは `.env` の `TF_AWS_PROFILE` だけを読み、全体をsource・eval・includeしない。
+- **`infra/` のファイルは、ユーザーが内容を確認して明示的にコミットを指示した場合だけコミットする。**
+- Actionsの `uses:` を変更するときは `pin-github-actions` skillに従い、フルcommit SHAとバージョンコメントで固定する。
 
-リファクタリングや機能追加の前に、[ツイート文面の改善案](docs/tweet-content-ideas.md)と[インフラの使い方・残タスク](infra/README.md)を読む。
+## 変更内容に応じて読む資料
 
-## ビルド・動作確認
+| 変更する内容 | 読む箇所 |
+| --- | --- |
+| 投稿内容・文面 | [ツイート改善案](docs/tweet-content-ideas.md)の関連節 |
+| 責務・投稿条件・失敗時の動作 | [開発上の判断と投稿仕様](docs/development.md)の関連節 |
+| インフラ・権限・デプロイ・運用 | [infra/README](infra/README.md)の関連節。検証処理は `.github/actions/verify-dotnet/` |
+| 環境構築・認証・エージェント導入 | [README](README.md#手元のpcで実行する)、[エージェント設定](README.md#エージェントの設定) |
+
+## ビルド・検証
 
 ```bash
 dotnet build MlbBot.sln
-# FunctionTestのSkipを維持すれば、実投稿なしで実行できる
 dotnet test MlbBot.sln
 dotnet format MlbBot.sln
 ```
 
-- 3プロジェクトとも対象はnet10.0。SDKは `global.json` で10.0系に固定している。
-- `Directory.Build.props` の `TreatWarningsAsErrors` により、警告もビルドエラーになる。依存パッケージ更新時も含め、その場で直す。
-- コード変更後は `dotnet format` を適用する。CIは `--verify-no-changes` で検証する。
-- コミット・push・PR作成前と変更の仕上げには、`verify-changes` skillで検証・機密情報スキャン・関連文書の確認を行う。
-- 認証情報・権限・外部入力の扱いを変更するときは `security-review` skillで確認する。エージェントのフックは補助であり、アプリやIAM自体の防御の代わりにしない。
-
-### ドライラン
+- SDK・依存は `global.json` と各プロジェクト定義を正とする。`Directory.Build.props` は警告もエラーにするため、依存更新時も根本原因を直す。コード変更後にformatを適用し、CIの `--verify-no-changes` を通す。
+- 変更の仕上げとコミット・push・PR作成前に `verify-changes` skillで検証・機密情報・関連資料を確認する。認証・権限・外部入力の変更には `security-review` skillを使う。hookはアプリやIAM自体の防御の代わりにしない。
+- ドライランは `MLB_API_KEY` のみ必要。Xの認証・送信は使わない。実投稿防止hookのため、次を単独・引用なしで実行する。
 
 ```bash
 dotnet run --project TwitterMlbBot -- --dry-run
 ```
 
-`--dry-run` 引数、または環境変数 `DRY_RUN=true` で有効になる。
-VSCodeのlaunch構成「TwitterMlbBot (dry-run / ツイートしない)」からも実行できる。
+## 実装・テスト・文書の規約
 
-送信先は `DryRunTweetSender` になり、文面をコンソールに出力する。
-X API認証情報を読み込まず、Xへの送信処理も呼ばない。必要な認証情報は `MLB_API_KEY` だけ。
+- 規模に見合う単純な構成を保つ。層・interfaceは読みやすさや変更範囲の限定に役立つ場合だけ増やす。取得元・送信先はinterfaceで差し替え、通信しない `TweetComposer` は直接使う。
+- 複雑な条件は判断の意味を表す変数にする。単純なnull/bool判定には説明用変数を重ねない。コメントは処理の言い換えでなく判断理由を書く。
+- **コメント・コミットメッセージは日本語。** エラーは取得できなかった情報や業務への影響を伝え、応答コード・環境変数名は調査用の補足にする。`this.` は同名の引数との区別だけ。書式はRoslyn / dotnet formatに任せ、`.editorconfig` は最小限にする。
+- 外部APIには `ApiHttpClientFactory` を使い、自動転送禁止と時間・応答サイズ上限を維持する。外部応答本文・認証情報・解析時の断片をログや例外（内部例外を含む）へ入れず、操作名・HTTPコード等だけを残す。
+- 保持・公開する成績や順位は不変にする。入力辞書の内容を固定し、返却リストは読み取り専用にする。遅延評価にも注意し、一時リストや不変recordには不要なコピーを足さない。
+- API応答はクライアント内のprivate recordから検証してドメイン型へ変換し、欠落した勝敗を0で補わない。成績の妥当性は `TeamStanding` 作成時に保証し、API解析側に同じ規則を重複させない。
+- テストの追加・修正は `spec-based-testing` skillに従う。入力と結果を検証し、文面の細かな配置・内部実装・不要な例外型に依存させない。時刻・API応答は固定入力、外部通信はフェイク（HTTPハンドラ自体の検証のみループバック）を使う。
+- 文書の処理・構成図はLR方向のMermaidでまとめ、ルールや例外は文章・表で補う。READMEの情報を落とさず、変わる値は実装・設定へリンクする。設計意図はコードコメントや関連資料に置く。自然で短い日本語を使い、引用でない文章を引用形式にしない。
 
-## コードの変更方針
+## CI・エージェント固有の条件
 
-### 読みやすさ
+- CIとデプロイ前の検証は共通actionを使い、その実行で検証・作成した成果物だけをデプロイする。ビルドには本番認証情報・OIDC権限を渡さず、deployではcheckoutしない。master以外の手動実行は拒否する。シェル引数は環境変数で受けて引用し、式を直接埋め込まない。
+- Dependabotレビューは `review-dependabot-prs` skillに従い、OK/NGともPRに結果を残す。OKならマージ、NGなら保留する。
+- 共通skillはプラグイン側で管理する。`.claude/hooks/post-edit.sh` による `.tf` の整形・初期化済みprodの検証を維持し、適用・破棄は人間が行う。
+- 実投稿防止の `guard-real-run.sh` は `.claude/settings.json` と `.codex/hooks.json` の `PreToolUse` に残す。`.codex/hooks` → `.claude/hooks` の相対リンクを維持する。Claudeの権限設定はCodexに引き継がれない。
 
-- 今の規模に見合う単純な構成を保つ。層・interface・プロジェクトを増やすのは、読みやすさや変更範囲の限定に役立つ場合だけにする。
-- 取得元・送信先はinterfaceで差し替える。外部通信のない文面生成は `TweetComposer` を直接使う。
-- 複雑な条件式は、判断の意味がわかる変数に入れてから分岐する。例: `canRankTeam`、`shouldIncludeWildCards`。
-- 単純なnullチェックや、名前だけで意味が伝わるboolに、説明用の変数を重ねない。
-- コメントには「なぜその判断をするか」「避けたい問題に対してどう対応するか」を書く。処理の言い換えだけにしない。
-- エラーメッセージは、取得できなかった情報や業務への影響が伝わる日本語にする。`null`や配列などの実装用語で説明せず、調査・復旧に必要な応答コードや環境変数名は補足として残す。
-- コメント・コミットメッセージは日本語で書く。
-- `this.` はフィールドと同名の引数を区別するときだけ付ける。
-- その他のC#の書式はRoslyn / `dotnet format` の既定値に任せる。`.editorconfig` は最小構成を保つ。
+## 調査と指示の保守
 
-### データの扱い
-
-- 外部API接続は `ApiHttpClientFactory` の設定を使う。認証ヘッダーの流出を防ぐため自動転送を禁止し、待ち時間・応答サイズに上限を設ける。
-- 外部応答の本文や認証情報は、ログ・例外・内部例外に含めない。解析エラーにも応答の断片が入るため、操作名・HTTP応答コードなど必要な情報だけを残す。
-
-- 成績や順位など、オブジェクトが保持・公開するデータは作成後に変えられない形にする。
-- 受け取った辞書は内容を固定して保持し、返すリストは読み取り専用にする。入力を後から変更しても、確定した結果に影響させない。
-- 遅延評価で結果の確定が遅れる場合も、入力の変更による影響に注意する。
-- メソッド内だけで使う一時リストや、不変recordの共有には不要なコピーを加えない。
-- 外部APIのレスポンスはクライアント内のprivate recordで受け、検証してからドメインの型に変換する。欠落した勝敗を0で補わない。
-- 成績の妥当性は `TeamStanding` の作成時に保証する。取得元を追加しても検証漏れが起きないよう、API解析側に同じ規則を重複させない。
-
-### テストとREADME
-
-- テストの追加・修正は `spec-based-testing` skillに従う。
-- テストでは入力と結果の関係を確認する。文面の細かなレイアウト・内部実装・不要な例外型の指定に依存させない。
-- 時刻やAPI応答は固定入力にし、外部通信はフェイクで置き換える。HTTPハンドラ自体の検証だけはループバックを使用する。リファクタや文面変更だけでテストの修正が必要になる状態を避ける。
-- READMEやこのガイドでは、構成・処理の流れをLR方向のMermaid図で示す。ルールや例外時の動作は文章・表で補い、まとめられる図はまとめる。
-- READMEの見せ方を整理するときは、既存の情報を落とさない。変更されやすい時刻・件数・判定条件・バージョンは、情報の所在がわかる実装・設定へのリンクで案内する。
-- 細かな設計意図はコードコメントやこのガイドに書く。日本語は自然で短い表現にし、引用でない文章を引用形式にしない。
-
-## プログラムの構成
-
-矢印は処理の順序を示す。取得元・送信先のクラス構成は[README](README.md)を参照する。
-
-```mermaid
-flowchart LR
-    F["Function<br>Lambdaから起動"] --> P["Program.Main<br>引数解析・組み立て"]
-    P --> S
-    subgraph R["BotRunner"]
-        direction LR
-        S["シーズン判定"] --> A["順位取得"] --> C["文面作成"] --> T["送信<br>またはドライラン出力"]
-    end
-```
-
-| 場所 | 内容 |
-| --- | --- |
-| `TwitterMlbBot/` | ボット本体。OutputTypeはExeで、ローカル実行もできる |
-| `TwitterMlbBotExecution/src/` | Lambdaハンドラ。`Program.Main(null)` を呼ぶ |
-| `TwitterMlbBotExecution/test/` | 通信不要のテストと、Skip付きの手動疎通用 `FunctionTest` |
-| `infra/` | Terraformによるインフラ管理 |
-| `.github/actions/verify-dotnet/` | CIとデプロイ前に使う共通の検証ステップ |
-| `.claude/` | リポジトリ固有のフックとClaude Code用の登録設定 |
-
-### 判断を置く場所
-
-| クラス | 担当する判断・処理 |
-| --- | --- |
-| `Program` / `RunOptions` | 依存関係の組み立て / 引数解析。`ApiHttpClientFactory` で安全なHTTP接続を作り、`Program` が寿命を管理して各クライアントに渡す |
-| `BotRunner` | 投稿するか、取得・送信に失敗したときに続けるかを判断する |
-| `MlbApiClient` / `MlbStatsApiClient` | API固有のレスポンスを `TeamStanding` / `SeasonCalendar` に変換する。`ParseStandings` / `ParseSeasonCalendar` は通信なしで検証できる |
-| `TeamStanding` | 作成時にチーム情報と勝敗を検証し、勝率・ゲーム差・順位付けの規則を持つ。プロパティを変更できないrecord |
-| `DivisionStanding` / `WildCardStanding` | 地区・ワイルドカードの順位を決め、順位順の `RankedTeam` を返す |
-| `SeasonCalendar` | シーズン終了後かどうかを判定する。不変record |
-| `TweetComposer` / `HashtagProvider` | 投稿対象と文面を決める / 公式ハッシュタグを管理する |
-| `TweetContent` | 投稿文面と重み付きの文字数上限を扱う値オブジェクト |
-| `ITweetSender` の実装 | X APIへの送信、またはドライラン出力を行う |
-
-## 投稿の仕様と背景
-
-### 実行日と投稿対象
-
-EventBridgeルール `CronTweetMlbStandings` が毎日06:00 UTC（15:00 JST）にLambdaを起動する。
-通常は地区ごとに6件、8月以降はリーグごとのワイルドカード2件を加えて8件投稿する。
-ワイルドカードを投稿する時期は `TweetComposer` が決める。
-
-スケジュールは年中起動するが、レギュラーシーズン終了日の翌日以降は順位取得も投稿もしない。
-終了日はMLB公式Stats API（statsapi.mlb.com、認証不要・無料）から取得する。
-応答の先頭を採用せず、シーズンIDで対象年を特定する。対象がない・複数ある・終了日の年が一致しない場合は日程取得失敗として扱う。
-
-| 日程・順位の状態 | 動作 |
-| --- | --- |
-| シーズン最終日まで | 順位を取得し、その日の文面を作る |
-| シーズン終了日の翌日以降 | 順位取得・投稿を見送る |
-| 日程取得に失敗し、3〜10月 | シーズン中の可能性があるため投稿を続ける。エラーログを出し、ログ監視アラームでメール通知する |
-| 日程取得に失敗し、11〜2月 | シーズン外として投稿を見送る。警告ログのみで正常終了し、メール通知しない |
-| 順位が空 | 投稿せず正常終了する |
-
-シーズン開始前はsportsdata.ioが空配列を返すため、投稿も発生しない。
-2027年の応答が空配列だったことは、過去の動作確認で確認済み。
-
-### 順位と文面
-
-- sportsdata.ioの応答にはAll-Star用の擬似チームが混ざる。リーグ名と地区名が同じ（`AL` / `AL`など）なので、`MlbApiClient.ParseStandings` で除外する。
-- 順位が空なら投稿しない。データがある場合は、球団の重複とMLBの地区構成を `MlbApiClient` で検証する。球団・リーグの欠落や所属の異常を検出した場合は順位取得全体を失敗とし、不完全な順位表を投稿しない。球団拡張・地区再編時は `ValidateTeamCoverage` の構成定義も見直す。
-- 勝率はAPIの小数3桁に丸めた値を使わず、勝敗から計算する。
-- ゲーム差も勝敗から計算する。地区は首位、ワイルドカードはプレーオフ圏の最終枠を基準にする。定義は `TeamStanding.GamesBehind` にある。
-- 公式ハッシュタグは `HashtagProvider` にまとめる。毎シーズン変わる可能性がある。
-- Xの上限280字は重み付きで数える。ラテン文字などは1、CJK文字・絵文字は2とし、`TweetContent.CharacterCount` がtwitter-textの設定に沿って計算する。
-- 結合絵文字は実際より多く数える場合があるため、上限超過の判定では警告だけを出す。送信は試み、実際に超過していればX APIが拒否する。
-
-### 送信と失敗時の扱い
-
-- 連続POSTで503になる問題への対策として、`TwitterApiSender` は次の投稿まで1秒空ける。最後の投稿の後は待たない。
-- 応答がなくても投稿済みの可能性があるため、自動再送はしない。
-- Lambdaの関数エラー時の再試行もTerraformで無効にする。これはAWS側の重複配信全般を防ぐ設定ではないため、将来の再実行対応では投稿の冪等性も設計する。
-- 送信先が例外を投げても、その1件の失敗として残りを続ける。全件失敗時だけ `AllTweetsFailedException` でエラー終了し、CloudWatchアラームからメール通知する。
-- OAuth 1.0a署名は `Authorization/OAuth1.cs` で生成する。未来のタイムスタンプで拒否されないよう、UNIXタイムスタンプを切り捨てる。
-- X APIは従量課金なので、投稿件数を増やす変更では費用も確認する。既存の運用メモでは通常投稿が$0.015/件、リンク入りが$0.20/件。シーズン中（3月末〜9月末）に6〜8件/日を投稿する場合の目安は年間約$19。
-
-## 認証情報・環境固有値
-
-設定はローカル・Lambdaともに環境変数だけを使う。
-必須の変数が未設定なら、`Program` はその変数名を含むエラーで起動時に停止する。
-
-| 実行方法 | 必要な環境変数 |
-| --- | --- |
-| ドライラン | `MLB_API_KEY` |
-| 通常の投稿 | 上記に加え、`CONSUMER_KEY`・`CONSUMER_SECRET`・`ACCESS_KEY`・`ACCESS_SECRET` |
-
-- リージョン・バケット名・アカウントIDなどは、gitignore対象の `backend.hcl`・`terraform.tfvars` などに置く。
-- リポジトリに置く設定例は `.example` のみ。実値に書き換えなければ必ずエラーになるダミー値を使う。
-- コミット前にAPIキーや環境固有値の混入を確認する。機械的な検出にはgitleaksとgit-secretsを使う。
-
-新しくcloneした環境では、git-secretsのpre-commitフックを設定する。
-
-```bash
-git secrets --install
-git secrets --register-aws
-```
-
-リポジトリ独自の禁止パターンも再登録する。
-パターン自体に環境固有情報を含むため、ローカルのgit configだけに保存し、コミットしない。
-
-## CI・デプロイ
-
-PR検証の `ci.yml` とデプロイ前検証の `lambda_deploy.yml` は、共通のcomposite action `.github/actions/verify-dotnet/` を使う。
-ビルド・フォーマット検証・テストの内容をそろえ、SDKバージョンは `global.json` から読む。
-
-masterへの変更は、`lambda_deploy.yml` のverifyで検証・Releaseビルド・パッケージを行い、その実行の成果物だけをdeployジョブでLambdaへ配置する。
-ビルド側には本番認証情報・OIDC発行権限を与えない。deploy側ではリポジトリをcheckoutせず、master以外の手動実行も拒否する。シェルの引数は環境変数で受けて引用し、式を直接埋め込まない。
-Markdown・`.github/`・`.claude/`・`.agents/`・`.codex/`・`.vscode/`・`.gitignore`・`Makefile`・`.env.example`・`infra/` だけの変更は自動デプロイの対象外。
-正確な対象は[ワークフローのpaths-ignore](.github/workflows/lambda_deploy.yml)を参照する。
-
-GitHub Actionsの依存更新はDependabotが月次で1つのPRにまとめる。
-レビューは `review-dependabot-prs` skillに従い、OK/NGを問わずPRに結果を残す。OKならマージし、NGなら保留する。
-
-## Claude Code・Codex・Geminiの設定
-
-- `AGENTS.md` → `CLAUDE.md` は相対シンボリックリンク。指示の実体はこのファイルで編集する。
-- `make setup` で、導入済みのClaude・Codexに [agent-plugins](https://github.com/shin4488/agent-plugins) をユーザー単位でインストールする。共通skillはプラグイン側で管理する。
-- 共通skillには `verify-changes`・`security-review`・`pin-github-actions`・`spec-based-testing`・`review-dependabot-prs` を使う。このリポジトリ固有の実行条件・マージ権限は、このガイドの規約に従う。
-- 編集後はプラグインから `.claude/hooks/post-edit.sh` を呼ぶ。編集した `.tf` を整形し、初期化済みの `infra/environments/prod` で一度だけ検証する。適用・破棄は人間が行う。
-- 実投稿防止の `guard-real-run.sh` は、Claudeの `.claude/settings.json` とCodexの `.codex/hooks.json` に `PreToolUse` として残す。`.codex/hooks` → `.claude/hooks` は相対シンボリックリンク。
-- 導入後はツールを読み込み直し、リポジトリを信頼してCodexの `/hooks` で承認する。登録コマンド変更時も再確認する（[手順](https://learn.chatgpt.com/docs/hooks)）。
-- ホストにはBash・Git・jq・realpath・Terraformが必要。Claudeのdeny設定はCodexには引き継がれない。
-- 投稿防止hookがあるため、確認時は `dotnet run --project TwitterMlbBot -- --dry-run` を単独・引用なしで実行する。
-- Gemini CLIで開発ガイドを読むには、`settings.json` の `context.fileName` に `AGENTS.md` を指定する（[公式ガイド](https://geminicli.com/docs/cli/gemini-md/#customize-the-context-file-name)）。このプラグインの導入対象はClaude CodeとCodex。
+- `AGENTS.md` は `CLAUDE.md` への相対リンク。本文は一度読み、実体を編集する。
+- `rg` は対象ディレクトリから名前・見出し・シンボルを探す。通常は `-g` で依存・成果物・ログ・ロックファイル・生成コードを除外し、依存・生成・型・障害の調査では直接読む。見つからなければ範囲・除外を見直す。
+- 必須検証を行い、要点・失敗箇所を報告する。同じ差分・依存・設定・実行条件の結果は再利用する。
+- ここは恒久規約・必須条件・主要コマンド・参照先に限る。進捗はチャット・既存Issue/PR、機能・構成・依存・設定等の現在値は元の定義へ。規約・条件・参照先の変更や継続して必要な判断基準の追加時に更新する。
+- スキルは説明から選び、該当 `SKILL.md` に従う。一覧・手順は転記せず、このガイドの必須適用条件は守る。
