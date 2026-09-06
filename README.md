@@ -101,6 +101,29 @@ VSCodeでは、実行構成 **TwitterMlbBot (dry-run / ツイートしない)** 
 
 必要な環境変数が未設定の場合は、起動時に変数名を含むエラーを表示して終了します。ドライランではXの認証情報を読み込みません。
 
+### 認証情報とclone後の設定
+
+APIキーと実行時設定は環境変数で管理します。リージョン・バケット名・アカウントIDなどの環境固有値は、Git管理外の `backend.hcl`・`terraform.tfvars` に置きます。リポジトリには、実値に置き換えない限り失敗するダミー値の `.example` だけを置きます。詳しい配置は [infra/README](infra/README.md)を参照してください。
+
+clone後はgit-secretsのpre-commitフックを設定します。
+
+```bash
+git secrets --install
+git secrets --register-aws
+```
+
+リポジトリ独自の禁止パターンもローカルのGit設定に再登録します。環境固有情報を含むため、パターン自体をコミットしないでください。コミット前にはgitleaksとgit-secretsで混入を確認します。
+
+## エージェントの設定
+
+`make setup` で、導入済みのClaude Code・Codexに [agent-plugins](https://github.com/shin4488/agent-plugins)をユーザー単位でインストールします。共通skillの実体はプラグイン側で管理します。
+
+導入後はツールを読み込み直し、リポジトリを信頼した上でCodexの `/hooks` で確認・承認します。登録コマンド変更時も再確認します。ホストにはBash・Git・jq・realpath・Terraformが必要です。Claudeの権限設定はCodexに引き継がれません。
+
+編集後の共通hookはリポジトリの `.claude/hooks/post-edit.sh` を呼び、編集した `.tf` を整形し、初期化済みの `infra/environments/prod` で一度だけ検証します。実投稿を防ぐ `guard-real-run.sh` は両ツールの `PreToolUse` 登録に残します。`.codex/hooks` は `.claude/hooks` への相対リンクです。ドライランのコマンドは単独・引用なしで実行してください。
+
+Gemini CLIでは `settings.json` の `context.fileName` に `AGENTS.md` を指定して共通の開発ガイドを読みます。プラグインの導入対象はClaude CodeとCodexです。
+
 ## デプロイ
 
 ```mermaid
@@ -130,5 +153,6 @@ GitHub ActionsはOIDCで一時的な認証情報を取得するため、長期�
 
 | 文書 | 内容 |
 |---|---|
+| [開発上の判断と投稿仕様](docs/development.md) | 責務の分け方・投稿条件・失敗時の扱い |
 | [ツイート改善案](docs/tweet-content-ideas.md) | 文面の改善や、掲載する情報の追加案 |
 | [インフラ管理](infra/README.md) | Terraformの構成・運用手順・今後の対応 |
