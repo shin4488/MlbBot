@@ -70,7 +70,7 @@ public class BotRunnerTest
     {
         return new List<TeamStanding>
         {
-            Teams.Create("AL", "West", "White Sox", 84, 56),
+            Teams.Create("AL", "West", "Mariners", 84, 56),
             Teams.Create("AL", "West", "Astros", 70, 70),
             Teams.Create("NL", "West", "Dodgers", 82, 48),
             Teams.Create("NL", "West", "Rockies", 60, 70),
@@ -107,7 +107,7 @@ public class BotRunnerTest
         await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.Equal(2, sender.SentContents.Count);
-        Assert.Contains(sender.SentContents, content => content.Contains("White Sox"));
+        Assert.Contains(sender.SentContents, content => content.Contains("Mariners"));
         Assert.Contains(sender.SentContents, content => content.Contains("Dodgers"));
     }
 
@@ -146,7 +146,7 @@ public class BotRunnerTest
     {
         // タイムアウト等で送信先が例外を投げても、その1件の失敗にとどめて他の地区は投稿する仕様
         var sender = new FakeTweetSender(content =>
-            content.Contains("White Sox") ? throw new HttpRequestException("送信失敗") : true);
+            content.Contains("Mariners") ? throw new HttpRequestException("送信失敗") : true);
 
         await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 

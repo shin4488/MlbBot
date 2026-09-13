@@ -62,7 +62,7 @@ internal record RunOptions(bool DryRun, int Year, DateOnly Date, PostingGroup Gr
             && year is >= 1 and <= 9999;
         if (!isValidYear)
         {
-            // 入力値自体はログに残さず、指定ミスで投稿範囲が広がることを防ぐ。
+            // 不正な引数を無視して意図しない設定で投稿を続けない。入力値自体はエラーに含めない。
             throw new ArgumentException(InvalidArgumentsMessage);
         }
         return year;
