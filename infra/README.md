@@ -1,98 +1,86 @@
 # infra — Terraformによるインフラ管理
 
-MLBボットのAWSリソースをTerraformで管理する。**関数コードのデプロイはGitHub Actionsのまま**で、Terraformはインフラ設定のみを扱う。
+MLBボットのAWSインフラをTerraformで管理します。**アプリケーションコードのデプロイはGitHub Actions経由で行い**、Terraformはインフラ設定（Lambda設定、IAM、EventBridge Scheduler、監視など）のみを管理します。
 
 ## ディレクトリ構成
 
 ```
 infra/
-├── .terraform-version        … tfenv用のバージョン固定（global.jsonと同じ発想）
+├── .terraform-version        … tfenv用のバージョン固定
 ├── modules/                  … 共通モジュール（リソース定義の本体）
-│   ├── scheduled_lambda/     … 定期実行Lambda一式（関数 + 実行ロール + ロググループ + Scheduler）
-│   ├── monitoring/           … Lambdaエラーの監視一式（SNSトピック + メール購読 + アラーム + エラーログ監視）
-│   ├── github_oidc_role/      … GitHub Actionsの認証とデプロイ用ロール
-│   └── assumable_role/        … 指定ユーザーが利用する管理用ロール
+│   ├── scheduled_lambda/     … 定期実行Lambda一式（関数設定 + 実行ロール + ロググループ + Scheduler）
+│   ├── monitoring/           … 監視・通知一式（SNSトピック + メール購読 + CloudWatchアラーム + ログ監視）
+│   ├── github_oidc_role/     … GitHub ActionsのOIDC認証・デプロイ用ロール
+│   └── assumable_role/       … 指定管理者用のAssumeRole
 └── environments/
-    └── prod/                 … 本番環境の実値定義（MakefileがここでTerraformを実行する）
-        ├── main.tf / monitoring.tf / iam.tf … 各モジュールに実際の値を渡す
-        ├── backend.tf                  … state管理の説明（S3バックエンド）
-        ├── backend.hcl.example         … S3バックエンド設定の雛形（実物はgitignore）
-        ├── terraform.tfvars.example    … 環境固有値の雛形（実物はgitignore）
+    └── prod/                 … 本番環境設定（Makefileから実行）
+        ├── main.tf / monitoring.tf / iam.tf … 各モジュールへのパラメータ渡し
+        ├── backend.tf                  … S3バックエンド設定
+        ├── backend.hcl.example         … S3バックエンド設定の雛形（実物はGit管理外）
+        ├── terraform.tfvars.example    … 環境固有値の雛形（実物はGit管理外）
         └── providers.tf / variables.tf / versions.tf
 ```
 
-## 管理しているリソース
+## 管理リソース
 
-### 管理・デプロイの権限
+### 管理・デプロイの権限（IAM）
 
-IAMロールは、一時的に利用する権限のまとまり。[prod/iam.tf](environments/prod/iam.tf) で「誰に、何の操作を許可するか」を決め、[assumable_role/main.tf](modules/assumable_role/main.tf) で管理用ロールと利用者側の許可を作る。
+[prod/iam.tf](environments/prod/iam.tf) でポリシーを定義し、[assumable_role/main.tf](modules/assumable_role/main.tf) および [github_oidc_role/main.tf](modules/github_oidc_role/main.tf) で各ロールを作成します。
 
 ```mermaid
 flowchart LR
-    U["指定した管理ユーザー"] -->|利用者側・ロール側の両方で許可| T["Terraform管理用ロール"]
-    T -->|設定を管理| A["ボット用のAWSリソース"]
-    T -->|管理状態を読み書き| S["S3のstate保存先"]
-    G["GitHub Actions<br>指定リポジトリ・ブランチ"] -->|OIDCで一時認証| D["デプロイ用ロール"]
-    D -->|コードだけ更新| L["Lambda"]
+    U["指定した管理ユーザー"] -->|利用者側・ロール側の双方で検証| T["Terraform管理用ロール"]
+    T -->|インフラ設定を管理| A["ボット用AWSリソース"]
+    T -->|stateを読み書き| S["S3バックエンド"]
+    G["GitHub Actions<br>（masterブランチ）"] -->|OIDC認証| D["デプロイ用ロール"]
+    D -->|コードのみ更新| L["AWS Lambda"]
 ```
 
-- **管理用ロール**：利用者側の許可に加え、ロール側でも指定ユーザーの識別子（ARN）を確認する。同じAWSアカウント内の別ユーザー・ロールが、広い権限を持っていても利用できないようにする。
-- **デプロイ用ロール**：GitHub Actionsの実行元を確認して一時認証する。認証の仕組みは [github_oidc_role/main.tf](modules/github_oidc_role/main.tf)、許可する操作は `prod/iam.tf` の `deploy_role` で定義する。
-- `prod/iam.tf` は、管理ユーザーがIAM設定を管理・修復するための初期設定用権限も管理する。これを失うと、管理者による再付与が必要になる。
+- **Terraform管理用ロール**: 利用者側の許可に加え、ロール側の信頼ポリシーでも指定ユーザーのARNを検証します。同一AWSアカウント内の他ユーザーが広範な権限を持っていても、意図せず本ロールを利用できないよう制限します。また、`prod/iam.tf` には管理ユーザーが自身の設定を修復するための初期設定用権限も含みます。
+- **デプロイ用ロール**: GitHub Actionsの実行元（指定リポジトリ・masterブランチ）をOIDCで検証し、一時認証によりLambdaのコード更新のみを許可します（`prod/iam.tf` の `deploy_role` で定義）。
 
 ### 定期実行・ログ・監視
 
-[scheduled_lambda/main.tf](modules/scheduled_lambda/main.tf) が、関数・実行用ロール・ログ保存先・定期実行をまとめて管理する。監視とメール通知は [monitoring/main.tf](modules/monitoring/main.tf) が担当する。
+[scheduled_lambda/main.tf](modules/scheduled_lambda/main.tf) がLambda関数・実行ロール・CloudWatch Logs・EventBridge Schedulerを一括管理します。監視とメール通知は [monitoring/main.tf](modules/monitoring/main.tf) が担当します。
 
 ```mermaid
 flowchart LR
-    E["EventBridge Scheduler<br>各代表現地時刻の朝8時"] -->|専用ロールで対象Lambdaのみ起動| L["Lambda<br>ボットを実行"]
-    R["実行用ロール"] -->|専用ログへの書き込みを許可| L
-    L -->|ログを記録| G["CloudWatch Logs<br>専用の保存先"]
-    L -->|関数の実行エラー| A["CloudWatchアラーム"]
-    G -->|エラーログを検知| A
-    A --> S["SNS<br>メール通知"]
+    E["EventBridge Scheduler<br>各代表現地時刻 朝8時"] -->|専用ロールで対象Lambdaのみ起動| L["AWS Lambda<br>ボット実行"]
+    R["実行ロール"] -->|専用ログへの書き込みのみ許可| L
+    L -->|実行ログを出力| G["CloudWatch Logs<br>専用ロググループ"]
+    L -->|関数実行エラー| A["CloudWatchアラーム"]
+    G -->|エラーログ検知| A
+    A --> S["SNSトピック<br>メール通知"]
 ```
 
-関数が失敗した場合と、投稿を続行しながらエラーログを残した場合を、それぞれ別のアラームで検知する。
-実行時刻・ランタイム・メモリ・制限時間・ログの保存期間は [prod/main.tf](environments/prod/main.tf) を参照。
+関数の実行失敗（エラー終了）と、処理継続中に記録されたエラーログの検知を別々のアラームで監視します。実行時刻・ランタイム・メモリ・タイムアウト・ログ保存期間は [prod/main.tf](environments/prod/main.tf) を参照してください。
 
-### 権限と再試行を制限する理由
+### 設計方針（権限と再試行の制限理由）
 
-| 設定 | 適用後の状態 | 理由 |
+| 設定項目 | 設計内容 | 理由 |
 | --- | --- | --- |
-| 管理用ロールの利用者 | 指定したIAMユーザーだけが利用できる | 他のユーザーの権限設定から、意図せず管理用ロールを使われるのを防ぐ |
-| Terraformの操作対象 | ボットのログ・通知先・アラームなどに限定する | 名前が似た別のAWSリソースを誤って参照・変更する範囲を減らす |
-| Lambdaへの権限の割り当て（PassRole） | Lambdaの実行用ロールだけを、Lambdaサービスへ割り当てられる | 管理用・デプロイ用の強い権限をボットへ渡す事故を防ぐ |
-| Lambdaのログ権限 | 専用の保存先への書き込みだけを許可する。保存先の作成・保存期間の設定はTerraformが行う | ボットに不要な管理権限や、別のログ保存先への書き込み権限を持たせない |
-| 関数エラー時の再試行 | 自動再試行を行わない | 投稿済みなのに応答だけ失った場合、同じ内容を再投稿するおそれがある |
+| 管理用ロールの信頼先 | 指定したIAMユーザーに限定 | 他のIAMユーザーから管理用ロールへの意図しない昇格・利用を防止するため |
+| Terraformの操作範囲 | ボット関連のリソース（ログ・SNS・アラーム等）に限定 | 名称が類似した別システムのリソースを誤って変更する事故を防ぐため |
+| Lambdaへの権限割当 (PassRole) | Lambda実行用ロールのみ許可 | 管理用・デプロイ用の強権限ロールが誤ってボットに割り当てられるのを防止するため |
+| Lambdaのログ出力権限 | 専用ロググループへの書き込みのみ許可 | 不要な管理権限の排除、および他のロググループへの書き込みを防止するため |
+| 関数エラー時の自動再試行 | 自動再試行なし（0回） | 二重投稿を防止するため（詳細は [送信制御仕様](../docs/development.md#送信制御とエラーハンドリング) 参照） |
 
-AWSの仕様上、対象を指定できない一覧取得操作だけは、全体への参照権限を残す。
-管理用ロールは自身の権限も編集できるため、引き続き管理者相当の扱いが必要。操作範囲の制限を本人が広げることまで防ぐには、別の管理者が権限の上限を設定する（permissions boundaryやSCP）。
+※ AWSの仕様上、対象リソースを限定できない一覧取得（Describe等）のみ、全体（`Resource = "*"`）への参照を許可しています。  
+※ 自動再試行を無効化することで一時障害からの自動復旧は行われません。また、AWS内部の重複配信を完全に防ぐものではないため、再実行基盤を導入する場合はアプリケーション側での重複排除設計が必要となります（[AWSの非同期呼び出し仕様](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)）。
 
-自動再試行を止める分、一時的な障害から自動で投稿し直す機会は減る。また、この設定はAWS側の重複配信すべてを防ぐものではない。再実行に対応する場合は、同じ投稿を二重に送らない仕組みも必要になる（[AWSの再試行仕様](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)）。
+### スケジュール設定と運用仕様
 
-### 地区別スケジュールへの切り替え
+- **スケジュールの有効・無効管理**: [prod/main.tf](environments/prod/main.tf) の `schedules_enabled` 変数でコード管理（Git管理）します。環境変数やローカルの `tfvars` では切り替えず、インフラの変更（apply）は人間が手動で実行します。
+- **Schedulerのセキュリティ**:
+  - 専用のスケジュールグループを使用し、同一アカウントからのみ実行ロールをAssumeRole可能としています。
+  - 信頼ポリシーの `SourceArn` には個別スケジュールではなくスケジュールグループのARNを指定しています（[AWS混同代理防止仕様](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html)）。
+  - 実行ロールの権限は対象Lambdaの起動（`lambda:InvokeFunction`）のみに限定しています。
+- **再試行設定**: 二重投稿防止のため、SchedulerおよびLambdaの自動再試行回数はともに0回に設定しています。
+- **コード・環境変数との分離**: アプリケーションコードはGitHub Actions、APIキー等の環境変数はLambda側で管理します。Terraform側では `ignore_changes` を設定しているため、インフラ更新時にコードや環境変数が上書きされることはありません。また、誤った関数の再作成を検知・失敗させるため、ダミーのS3参照設定を入れています。
 
-有効・無効は [prod/main.tf](environments/prod/main.tf) の `schedules_enabled` をGit管理する。環境変数やローカルtfvarsで切り替えない。変更は2 PRに分ける。applyは必ず人間が実行する。
+## モジュールを別用途で利用する場合
 
-1. **PR①：新コードと無効なスケジュールを準備。** レビュー後、マージ前にPRのブランチで `make tf-plan` を確認して `make tf-apply` を実行する。旧EventBridgeのルール・ターゲット・Lambda起動許可を削除し、専用Schedulerグループ・起動ロール・3件の無効なスケジュールを作成する。Lambda本体・ログ・監視は維持する。
-2. **停止を確認してPR①をマージ。** 旧スケジュールが消え、新3件がすべてDISABLEDであること、旧呼び出しが実行中・再配送待ちでないことを確認する。停止は既に受け付けた実行を取り消さない。マージでコードの自動デプロイが始まる。ワークフロー成功だけでなく、Lambdaの `LastUpdateStatus` が `Successful` になり、意図したコードが反映されたことを確認する（現在のデプロイ処理は更新完了を待たない）。確認のためにLambdaを実行しない。
-3. **PR②：新スケジュールを有効化。** `schedules_enabled = true` の変更をレビュー・マージし、最新masterで `make tf-plan` と `make tf-apply` を実行する。3件の状態変更と、旧EventBridgeルールの管理・Lambda起動許可の管理に使っていた権限の削除を確認する。infraのみの変更ではコードの自動デプロイは走らない。
-
-切り替えは新旧の実行時刻から十分離して行う。新しい表示日と、旧投稿の表示日・対象地区を照合し、最初の3グループが同じ対象日を一通り処理でき、投稿済み分と重複しない開始日を選ぶ。旧投稿がその日分を送信済みなら、その新枠は有効にせず、必要なら翌日の東部枠より前まで停止を維持する。停止中の枠は後からまとめて投稿しない。
-
-移行applyではTerraform管理ロール自身のScheduler権限も追加する。plan成功は変更APIの許可・IAM反映完了の保証ではない。権限不足なら、正式なポリシーへの反映を人間が確認してからplanを取り直す（[権限更新時の注意](#権限を追加するapplyでその権限を使う操作が拒否された場合)）。部分失敗時はPR①をマージせず、旧停止・新無効の状態が揃うまで確認する。
-
-ロールバックもまず新3件を無効化する変更をレビュー・applyし、実行が終了したことを確認する。その後、旧コードと旧スケジュールを無効状態で戻す。旧ルールの管理権限とLambda起動許可の管理権限は移行後に削除しているため、必要な権限を先にレビューして復元する。旧コード反映と当日の投稿状況を確認してから旧ルールを有効化する。新コードは旧イベントを拒否し、旧コードは新イベントのグループを無視して全地区を投稿するため、コードとイベントの組み合わせを崩さない。
-
-Schedulerは専用グループと同一アカウントからのみ実行ロールを引き受けられ、対象Lambdaの起動だけを許可する。信頼条件のSourceArnは個別スケジュールではなくグループARNを指定する（[AWS仕様](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html)）。SchedulerとLambdaの関数エラー再試行はともに0回とし、投稿履歴の保存は追加しない。AWS側の重複配送の可能性は残る。
-
-関数コードはGitHub Actions、APIキーなどの環境変数はLambda側で管理する。既存関数では `ignore_changes` により、Terraformがコードや環境変数を上書きしない。この本番設定は初回コードを指定しないため、ダミーS3参照によって誤った関数の再作成を失敗させる。
-
-## モジュールを別用途で使う場合
-
-`scheduled_lambda` は1つのLambdaを任意の件数のSchedulerで起動する。`schedules` のキーがスケジュール名になり、各値に `schedule_expression`、`time_zone`（省略時UTC）、`input`（省略可のJSON文字列）を渡す。MLBの地区名や朝8時という条件はprod側だけに置く。
+`scheduled_lambda` モジュールは、1つのLambda関数に対して任意の件数のEventBridge Schedulerを紐付ける汎用設計です。`schedules` マップのキーがスケジュール名となり、各要素に `schedule_expression`、`time_zone`（省略時UTC）、`input`（省略可能なJSON文字列）を渡します。MLB固有の地区名や朝8時といった条件は `environments/prod` 側で注入します。
 
 ```hcl
 schedules = {
@@ -107,74 +95,61 @@ schedules = {
 }
 ```
 
-新規Lambdaを作る場合は `initial_code = { s3_bucket = "…", s3_key = "…" }` に初回コードのS3参照を渡す。コードの準備と作成権限は呼び出し側で用意する。省略時は従来どおり既存関数の管理専用で、誤再作成を失敗させる。作成後のコード配布・環境変数はTerraform管理外という責務を維持する。
+新規にLambda関数を作成する場合は、`initial_code = { s3_bucket = "…", s3_key = "…" }` に初期デプロイ用コードのS3参照を渡します。省略した場合は既存関数の管理専用となり、誤った再作成を防止します。
 
-スケジュールは既定で無効、実行時刻の柔軟な遅延は無効、Schedulerの自動再試行は0回とする。任意のAWSサービスを起動する仕組みや、全設定を切り替える汎用基盤には広げない。実行ロールの信頼先と操作対象の制限も共通で維持する。
+## 初回セットアップ（リポジトリclone直後）
 
-## 初回セットアップ（clone直後）
-
-先に `~/.aws/config` にTerraform用のプロファイルを作る（[運用メモ](#運用メモ)参照）。
+事前に `~/.aws/config` にTerraform用のプロファイルを作成してください（[運用メモ](#運用メモ)参照）。
 
 ```bash
-# リポジトリのルートで実行する
-# .envがない場合だけ作成する（既存のAPIキーを上書きしない）
+# リポジトリルートで実行
 test -e .env || cp .env.example .env
 cp infra/environments/prod/terraform.tfvars.example infra/environments/prod/terraform.tfvars
 cp infra/environments/prod/backend.hcl.example infra/environments/prod/backend.hcl
-# .envにTF_AWS_PROFILE=の行を追加して名前を記入し、残り2ファイルの値も設定する
+
+# .env に TF_AWS_PROFILE=<プロファイル名> を設定し、上記2ファイルにも必要な値を設定
 make tf-init
-make tf-plan    # 既存インフラと一致していれば「No changes」になる
+make tf-plan    # 既存インフラと一致していれば「No changes」が表示される
 ```
 
-## 日常の使い方
+## 日常の運用コマンド
 
-`.env` に `TF_AWS_PROFILE=プロファイル名` を設定すれば、以下をリポジトリのルートで実行できる（[設定例](../.env.example)・[Makefile](../Makefile)）。毎回のプロファイル指定やディレクトリ移動は不要。
+`.env` に `TF_AWS_PROFILE=プロファイル名` を設定することで、リポジトリルートから以下の `make` コマンドを実行できます（[Makefile](../Makefile) 参照）。
 
-| ルートで実行するコマンド | 用途 |
+| コマンド | 用途 |
 | --- | --- |
 | `make` | コマンド一覧を表示 |
-| `make tf-plan` | 本番との差分を確認 |
-| `make tf-apply` | 差分を確認し、`yes` で適用（人間が実行） |
-| `make tf-fmt tf-validate` | infra全体の書式整形・設定検証 |
-| `make tf-test` | テスト対象モジュール・環境設定の準備・モックテスト |
+| `make tf-plan` | 本番環境との差分確認 |
+| `make tf-apply` | 差分確認後、手動承認（`yes`）で本番環境へ適用 |
+| `make tf-fmt tf-validate` | インフラコードの書式整形および構文検証 |
+| `make tf-test` | モジュール・環境設定のモックテスト実行 |
 
-- `.env` はGit管理外。プロファイル名だけを読み、未設定なら接続前に停止する。APIキーやターミナル全体の設定には触れない。
-- 一時的な切り替え：`make tf-plan TF_AWS_PROFILE=<プロファイル名>`
-- Terraformを直接使う場合：`infra/environments/prod` でプロファイルを指定して実行。
-- モジュールのテスト：`make tf-test` で初期化からまとめて実行。
-  `modules/*/tests/` でロールの利用者・ログ権限・任意のスケジュール設定を、`environments/prod/tests/` でMLB固有の3グループ・朝8時・有効状態を検証する。
-  全providerをモック化し、planだけで判定するため、AWSの認証情報や本番stateは使わない。
+- `.env` はGit管理外です。プロファイル名のみを読み込み、未設定時は実行前に停止します。
+- 一時的にプロファイルを切り替える場合: `make tf-plan TF_AWS_PROFILE=<プロファイル名>`
+- ディレクトリを直接移動して実行する場合: `infra/environments/prod` にてプロファイルを指定して実行。
+- 単体テスト: `make tf-test` で実行。全プロバイダーをモック化してplanレベルで検証するため、AWS認証情報や本番stateは不要です。
 
-### planでIAMユーザーの情報取得が拒否された場合
+### トラブルシューティング（権限関連）
 
-`assumable_role` は信頼先ユーザーのARNを取得するため、planの実行者に対象ユーザーへの `iam:GetUser` が必要。
-Terraform用ロールにはこの権限があるが、IAMユーザーで直接実行する場合は、そのユーザー側にも許可が必要になる。
-`prod/iam.tf` の `ReadTerraformUser` で自身の情報取得だけを許可する。初回は、権限を持つ管理者がこの許可を付与するか、既存のTerraform用ロールで実行する。
-plan中に必要な権限なので、定義を追記するだけでは403を解消できない。権限を整えてからplanをやり直し、エラーのない差分を確認して適用する。
+#### planでIAMユーザー情報の取得が拒否（403）される場合
+`assumable_role` が信頼先ユーザーのARNを取得するため、plan実行者に `iam:GetUser` 権限が必要です。IAMユーザーで直接実行する場合、`prod/iam.tf` の `ReadTerraformUser` で自身の情報取得を許可する必要があります。
 
-### Terraform用ロールでログ保存先の一覧取得が拒否された場合
+#### ロググループの一覧取得が拒否（403）される場合
+AWSの仕様上、`logs:DescribeLogGroups` はリソース指定による絞り込みができず `Resource = "*"` が必要です。`prod/iam.tf` の `ResourceDiscovery` ポリシーで本操作を許可しています。
 
-旧定義では `logs:DescribeLogGroups` の対象も個別のログ保存先に絞っていたため、対象に `*` が必要な一覧取得を許可できていない。
-修正後は `prod/iam.tf` の `ResourceDiscovery` で許可するが、適用前のplanにもこの権限が必要になる。
-初回はロールの権限を変更できる主体で、`logs:DescribeLogGroups` と `Resource = "*"` だけを一時的な別ポリシーとして付け、planを再実行する。
-修正後の定義をapplyし、正式なポリシーで同じ操作を許可できたことを確認してから、一時ポリシーを外してplanを再確認する。
+#### 権限追加のapplyで、追加した権限を使う操作が拒否される場合
+Terraform管理用ロール自身の権限更新と、その新しい権限を必要とする設定変更を同時に行うと、IAMの反映遅延（結果整合性）により一時的に403エラーとなる場合があります。失敗した場合でも適用済みの変更は保持されるため、ロールへの権限反映完了を確認後、再度planを取得して残りの変更を適用してください。
 
-### 権限を追加するapplyで、その権限を使う操作が拒否された場合
+## Terraform State の管理（⚠️ 重要）
 
-Terraform用ロール自身の権限更新と、新しい権限を使う設定変更を同時に行うと、実行順序やIAMの反映待ちによって403になる場合がある。planが成功しても、変更APIの実行権限まで確認できているわけではない。
-失敗したapplyでも、成功済みの変更は残る。まず実行ロールの正式なポリシーに必要な操作と対象が反映されたことを確認し、planを取り直して残りの変更を適用する。新しい権限を事前に用意する場合も、対象の操作・リソースだけに限定する。
-
-## state（⚠️ 重要）
-
-- stateは**S3バックエンド**で管理（非公開・暗号化・バージョニング設定済みのバケット）。接続情報は環境固有のためgitignore対象の `backend.hcl` で渡す（雛形: [backend.hcl.example](environments/prod/backend.hcl.example)）
-- stateには**Lambda環境変数の値が平文で入る**。バケットやstateの内容を公開・共有しないこと
+- stateは**S3バックエンド**で管理（非公開・暗号化・バージョニング設定済み）。接続先は環境固有値のため、Git管理外の `backend.hcl` で渡します（雛形: [backend.hcl.example](environments/prod/backend.hcl.example)）。
+- stateファイルには**Lambda環境変数の値が平文で保存**されます。S3バケットへのアクセス権限は厳重に管理し、外部へ共有しないでください。
 
 ## 運用メモ
 
-- アラームのメール通知は、SNS購読の確認メールを承認するまで有効にならない（購読を作り直した場合も同様）
-- デプロイはOIDC認証（GitHub Secretsの `AWS_DEPLOY_ROLE_ARN` でロール指定）。ロールの信頼はmasterブランチ限定のため、他ブランチからの `workflow_dispatch` は認証段階で拒否される
-- Terraform実行用ロールを使う場合は `~/.aws/config` にAssumeRoleプロファイルを追加する（ロールARNは環境固有情報のためここには書かない。AWSコンソールで確認する）
+- **アラーム通知の有効化**: SNSトピック作成後、配信確認メール内の承認リンクをクリックするまでメール通知は有効になりません。
+- **Terraformの実行環境**: ローカルからTerraformを実行する場合は、事前に `~/.aws/config` にAssumeRoleプロファイルを構成してください。
 
-## 次の対応候補
+## 今後の改善候補
 
-1. **APIキーをSSM Parameter Store（SecureString・無料）へ移行** … アプリが起動時に `ssm:GetParametersByPath` で読む方式にすると、Lambda環境変数とtfstateから機密が消え、キー更新もCLIで完結する（`environment` のignore_changesも不要になる）。実行ロールへの権限付与はTerraform、パラメータ登録はCLI、読み込みはアプリ側の対応
+- **SSM Parameter Store への移行**: APIキーをSSM Parameter Store（SecureString）へ移行し、アプリケーション起動時に `ssm:GetParametersByPath` で取得する方式に変更することで、Lambda環境変数およびtfstateから機密情報を排除し、キー更新をAWS CLI経由で完結可能にします。
