@@ -92,15 +92,8 @@ module "terraform_role" {
       {
         Sid      = "LambdaConfig"
         Effect   = "Allow"
-        Action   = ["lambda:Get*", "lambda:List*", "lambda:UpdateFunctionConfiguration", "lambda:PutFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig", "lambda:AddPermission", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource"]
+        Action   = ["lambda:Get*", "lambda:List*", "lambda:UpdateFunctionConfiguration", "lambda:PutFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig", "lambda:TagResource", "lambda:UntagResource"]
         Resource = module.twitter_mlb_bot.function_arn
-      },
-      {
-        Sid    = "EventBridge"
-        Effect = "Allow"
-        Action = ["events:Describe*", "events:List*", "events:PutRule", "events:DeleteRule", "events:PutTargets", "events:RemoveTargets", "events:EnableRule", "events:DisableRule", "events:TagResource", "events:UntagResource"]
-        # 旧ルールを削除する移行applyでも必要。新リソースのARNへ置き換えない。
-        Resource = "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:rule/CronTweetMlbStandings"
       },
       {
         Sid      = "SchedulerSchedules"

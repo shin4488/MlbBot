@@ -34,15 +34,15 @@ variables {
   terraform_user_name = "test-user"
 }
 
-run "three_disabled_morning_groups" {
+run "three_enabled_morning_groups" {
   command = plan
   assert {
     condition = toset(keys(module.twitter_mlb_bot.schedules)) == toset(["East", "Central", "West"]) && alltrue([
       for name, schedule in module.twitter_mlb_bot.schedules :
-      schedule.state == "DISABLED" && schedule.schedule_expression == "cron(0 8 * * ? *)" &&
+      schedule.state == "ENABLED" && schedule.schedule_expression == "cron(0 8 * * ? *)" &&
       schedule.time_zone == lookup({ East = "America/New_York", Central = "America/Chicago", West = "America/Los_Angeles" }, name, "") &&
       jsondecode(schedule.input) == { group = name }
     ])
-    error_message = "PR①では東・中・西の現地朝8時に対象グループを渡す3件を無効で作成してください。"
+    error_message = "東・中・西の現地朝8時に対象グループを渡す3件が有効である必要があります。"
   }
 }
