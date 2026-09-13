@@ -39,7 +39,7 @@ namespace TwitterMlbBot.Mlb
             }
 
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            IReadOnlyList<TeamStanding> standings = ParseStandings(responseBody);
+            IReadOnlyList<TeamStanding> standings = ParseStandings(year, responseBody);
             // レスポンス全文はログに出さず、運用確認に必要な件数のみ出力する
             logger.LogInformation("MLB standings fetched: {TeamCount} teams for {Year}", standings.Count, year);
             return standings;
@@ -48,32 +48,34 @@ namespace TwitterMlbBot.Mlb
         /// <summary>
         /// APIレスポンスからチーム成績を取り出す。All-Star用の擬似チームはここで除外し、ドメインには渡さない
         /// </summary>
-        internal static IReadOnlyList<TeamStanding> ParseStandings(string responseBody)
+        internal static IReadOnlyList<TeamStanding> ParseStandings(int year, string responseBody)
         {
+            List<StandingResponse?> parsed;
             try
             {
-                List<StandingResponse?> parsed = JsonSerializer.Deserialize<List<StandingResponse?>>(responseBody)
-                    ?? throw new InvalidOperationException("配信元から順位情報が届いていないため、順位表を作成できません。");
-
-                // 一部のチームだけ除外すると順位が変わるため、不正な成績があれば取得全体を失敗にする。
-                List<TeamStanding> standings = parsed
-                    .Select(standing => standing
-                        ?? throw new InvalidOperationException("一部のチームの成績が欠けているため、順位表を作成できません。"))
-                    .Where(standing => !standing.IsAllStarPseudoTeam)
-                    .Select(standing => standing.ToTeamStanding())
-                    .ToList();
-
-                ValidateTeamCoverage(standings);
-                return standings.AsReadOnly();
+                parsed = JsonSerializer.Deserialize<List<StandingResponse?>>(responseBody)
+                    ?? throw new InvalidOperationException($"{year}年の順位情報: 配信元から順位情報が届いていないため、順位表を作成できません。");
             }
-            catch (JsonException)
+            catch (JsonException exception)
             {
-                // JsonExceptionにも応答の断片が入るため、ログへ流れる内部例外には含めない。
-                throw new InvalidOperationException("配信元の順位情報を読み取れないため、順位表を作成できません。");
+                // Message・Path・内部例外には応答の断片が入りうるため、数値の解析位置だけを残す。
+                throw new InvalidOperationException(
+                    $"{year}年の順位情報の解析に失敗したため、順位表を作成できません。想定したJSON形式ではありません。（0始まりの行番号: {exception.LineNumber?.ToString() ?? "不明"}、行内バイト位置: {exception.BytePositionInLine?.ToString() ?? "不明"}）");
             }
+
+            // 一部のチームだけ除外すると順位が変わるため、不正な成績があれば取得全体を失敗にする。
+            List<TeamStanding> standings = parsed
+                .Select(standing => standing
+                    ?? throw new InvalidOperationException($"{year}年の順位情報: 一部のチームの成績が欠けているため、順位表を作成できません。"))
+                .Where(standing => !standing.IsAllStarPseudoTeam)
+                .Select(standing => standing.ToTeamStanding(year))
+                .ToList();
+
+            ValidateTeamCoverage(year, standings);
+            return standings.AsReadOnly();
         }
 
-        private static void ValidateTeamCoverage(IReadOnlyList<TeamStanding> standings)
+        private static void ValidateTeamCoverage(int year, IReadOnlyList<TeamStanding> standings)
         {
             // 開幕前の空順位は正常。データがある場合だけ全地区の球団がそろっているかを確かめる。
             if (standings.Count == 0)
@@ -85,7 +87,7 @@ namespace TwitterMlbBot.Mlb
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count() == standings.Count;
             if (!hasUniqueTeams)
             {
-                throw new InvalidOperationException("同じ球団の成績が重複しているため、順位表を作成できません。");
+                throw new InvalidOperationException($"{year}年の順位情報: 同じ球団の成績が重複しているため、順位表を作成できません。");
             }
 
             // 件数だけでは「1球団が欠け、別の球団が重複した応答」や所属の誤りを見逃す。
@@ -99,7 +101,7 @@ namespace TwitterMlbBot.Mlb
                     && division.Count() == teamsPerDivision);
             if (!hasCompleteDivisions)
             {
-                throw new InvalidOperationException("所属リーグ・地区や球団数がMLBの構成と一致しないため、順位表を作成できません。");
+                throw new InvalidOperationException($"{year}年の順位情報: 所属リーグ・地区や球団数がMLBの構成と一致しないため、順位表を作成できません。");
             }
         }
 
@@ -111,11 +113,11 @@ namespace TwitterMlbBot.Mlb
             [property: JsonPropertyName("Wins")] int? Wins,
             [property: JsonPropertyName("Losses")] int? Losses)
         {
-            public TeamStanding ToTeamStanding()
+            public TeamStanding ToTeamStanding(int year)
             {
                 // API項目の欠落を0勝・0敗で補わない。成績自体の妥当性はTeamStandingが保証する。
-                int wins = Wins ?? throw new InvalidOperationException("勝ち数が記載されていないチームがあるため、順位表を作成できません。");
-                int losses = Losses ?? throw new InvalidOperationException("負け数が記載されていないチームがあるため、順位表を作成できません。");
+                int wins = Wins ?? throw new InvalidOperationException($"{year}年の順位情報: 勝ち数が記載されていないチームがあるため、順位表を作成できません。");
+                int losses = Losses ?? throw new InvalidOperationException($"{year}年の順位情報: 負け数が記載されていないチームがあるため、順位表を作成できません。");
                 return new TeamStanding(Name ?? string.Empty, League ?? string.Empty, Division ?? string.Empty, wins, losses);
             }
 

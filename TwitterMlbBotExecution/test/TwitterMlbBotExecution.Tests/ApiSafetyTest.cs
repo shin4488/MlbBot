@@ -82,10 +82,48 @@ public class ApiSafetyTest
         string malformed = "{\"" + privateContent + "\": tru}";
         Exception exception = Assert.ThrowsAny<Exception>(() =>
         {
-            if (standings) MlbApiClient.ParseStandings("[" + malformed + "]");
+            if (standings) MlbApiClient.ParseStandings(2026, "[" + malformed + "]");
             else MlbStatsApiClient.ParseSeasonCalendar(malformed, 2026);
         });
 
+        Assert.DoesNotContain(privateContent, exception.ToString());
+    }
+
+    [Fact]
+    public async Task 順位の解析失敗は対象年と解析位置を残し応答内容を漏らさない()
+    {
+        const string privateContent = "dummy-private-property";
+        // 先頭の非ASCII文字で失敗させ、0始まりの行番号1・行内バイト位置0を固定する。
+        string malformed = "[\n秘{\"" + privateContent + "\": tru}]";
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(malformed) })));
+
+        Exception exception = await Assert.ThrowsAnyAsync<Exception>(() =>
+            new MlbApiClient(client, "dummy-key", NullLogger<MlbApiClient>.Instance).GetStandingsAsync(2026));
+
+        string detail = exception.ToString();
+        Assert.Contains("2026年", detail);
+        Assert.Contains("順位情報の解析", detail);
+        Assert.Contains("行番号: 1", detail);
+        Assert.Contains("行内バイト位置: 0", detail);
+        Assert.DoesNotContain(privateContent, detail);
+        Assert.DoesNotContain("秘", detail);
+        Assert.DoesNotContain("dummy-key", detail);
+    }
+
+    [Theory]
+    [InlineData("[{\"Wins\":\"dummy-private-value\"}]", "dummy-private-value")]
+    [InlineData("[{\"dummy-private-property\": tru}]", "dummy-private-property")]
+    public async Task 順位の解析失敗は例外を連鎖させず応答内容を漏らさない(string responseBody, string privateContent)
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(responseBody) })));
+
+        Exception exception = await Assert.ThrowsAnyAsync<Exception>(() =>
+            new MlbApiClient(client, "dummy-key", NullLogger<MlbApiClient>.Instance).GetStandingsAsync(2026));
+
+        Assert.Null(exception.InnerException);
+        Assert.Contains("2026年", exception.ToString());
         Assert.DoesNotContain(privateContent, exception.ToString());
     }
 
