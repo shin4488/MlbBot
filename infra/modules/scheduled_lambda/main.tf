@@ -1,6 +1,6 @@
 # 定期実行Lambda一式（Lambda関数 + 実行ロール + ロググループ + EventBridgeスケジュール）を
 # まとめて作成する共通モジュール。
-# 関数コードのデプロイはTerraformの管理外（このリポジトリではGitHub Actionsが担う）で、
+# 初回作成後の関数コードのデプロイはTerraformの管理外（このリポジトリではGitHub Actionsが担う）で、
 # Terraformはインフラ設定のみを管理する。
 
 # ---- IAM ----
@@ -57,15 +57,15 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout
 
   # aws_lambda_functionはコード指定（filename/s3_bucket/image_uri）が構文上必須のため、
-  # 存在し得ないS3参照をダミーとして与える。既存関数の更新ではignore_changesにより無視され、
+  # 初回コードが未指定なら存在し得ないS3参照をダミーとして与える。既存関数の更新では無視され、
   # 万一関数を再作成しようとした場合も必ず失敗して止まる（安全側に倒れる）。
   # バケット名はS3の上限63文字を超えているため、第三者がこの名前のバケットを作ることも不可能
-  s3_bucket = "terraform-placeholder-never-used-this-name-exceeds-the-s3-63-character-limit-so-it-cannot-exist"
-  s3_key    = "terraform-placeholder-never-used.zip"
+  s3_bucket = var.initial_code != null ? var.initial_code.s3_bucket : "terraform-placeholder-never-used-this-name-exceeds-the-s3-63-character-limit-so-it-cannot-exist"
+  s3_key    = var.initial_code != null ? var.initial_code.s3_key : "terraform-placeholder-never-used.zip"
 
   lifecycle {
     ignore_changes = [
-      # 上のダミーS3参照は実態と常に不一致のため、差分と誤ったコード更新を抑止する
+      # 配布済みコードを初回コードやダミー参照へ巻き戻さない
       s3_bucket,
       s3_key,
       # APIキー等の環境変数は値を.tfに書かないため管理しない（Lambda側で直接管理。
@@ -77,7 +77,7 @@ resource "aws_lambda_function" "this" {
 
 # ---- 非同期実行 ----
 
-# 投稿が成功しても通信障害で応答を受け取れない場合に備え、重複投稿を避ける。
+# 副作用が成功しても応答だけ受け取れない場合に備え、重複実行を避ける。
 # そのため、関数エラーによる全体の自動再実行は既定で行わない。
 # Lambdaの重複配信全般を防ぐものではなく、実行ごとの冪等性はアプリ側で別途考慮する。
 resource "aws_lambda_function_event_invoke_config" "this" {
@@ -92,25 +92,66 @@ resource "aws_cloudwatch_log_group" "this" {
   retention_in_days = var.log_retention_days
 }
 
-# ---- EventBridge（定期実行） ----
+# ---- EventBridge Scheduler（定期実行） ----
 
-resource "aws_cloudwatch_event_rule" "this" {
-  name                = var.rule_name
-  description         = var.rule_description
-  schedule_expression = var.schedule_expression
-  state               = var.rule_state
+data "aws_caller_identity" "current" {}
+
+resource "aws_scheduler_schedule_group" "this" {
+  # 初回はTerraform自身の管理権限を追加してから新リソースの作成を始める。
+  depends_on = [var.scheduler_management_dependencies]
+  name       = var.schedule_group_name
 }
 
-resource "aws_cloudwatch_event_target" "this" {
-  rule      = aws_cloudwatch_event_rule.this.name
-  target_id = var.event_target_id
-  arn       = aws_lambda_function.this.arn
+resource "aws_iam_role" "scheduler" {
+  name = var.scheduler_role_name
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      # Schedulerは個別スケジュールではなく、スケジュールグループのARNを渡す。
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        ArnEquals    = { "aws:SourceArn" = aws_scheduler_schedule_group.this.arn }
+      }
+    }]
+  })
 }
 
-resource "aws_lambda_permission" "this" {
-  statement_id  = var.permission_statement_id
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.this.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.this.arn
+resource "aws_iam_role_policy" "scheduler" {
+  name = "invoke-scheduled-function"
+  role = aws_iam_role.scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = aws_lambda_function.this.arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "this" {
+  for_each   = var.schedules
+  depends_on = [aws_iam_role_policy.scheduler]
+
+  name                         = each.key
+  group_name                   = aws_scheduler_schedule_group.this.name
+  schedule_expression          = each.value.schedule_expression
+  schedule_expression_timezone = each.value.time_zone
+  state                        = var.schedules_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.this.arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = each.value.input
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
 }

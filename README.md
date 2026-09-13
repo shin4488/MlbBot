@@ -10,7 +10,7 @@ MLBの順位表をXへ自動投稿するボットです。投稿先: [@MLBbot2](
 
 ```mermaid
 flowchart LR
-    F["Function<br>EventBridgeからAWS Lambdaで起動<br>本体を呼び出す"] --> P["Program.Main<br>取得・送信などに使うクラスを用意する"]
+    F["Function<br>EventBridge SchedulerからAWS Lambdaで起動<br>本体を呼び出す"] --> P["Program.Main<br>取得・送信などに使うクラスを用意する"]
     P --> O["RunOptions<br>起動引数を読み取る"]
     P --> R["BotRunner.RunAsync<br>日程確認 → 順位取得 → 文面作成 → 送信<br>投稿するか、エラー時に続けるかを判断する"]
     click F "TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
@@ -19,7 +19,11 @@ flowchart LR
     click R "TwitterMlbBot/BotRunner.cs"
 ```
 
-EventBridgeのルール名・実行時刻・Lambdaで使う.NETのバージョンは、[Terraformの設定](infra/environments/prod/main.tf)で確認できます。
+Schedulerの有効状態・代表タイムゾーン・Lambdaで使う.NETのバージョンは、[Terraformの設定](infra/environments/prod/main.tf)で確認できます。
+
+有効化後は、東部・中部・西部の代表現地時刻で毎朝8時に、そのグループのAL/NL地区順位を投稿します。西部では表示日が8月以降の場合にAL/NLワイルドカードも投稿します。表示日は各代表タイムゾーンの前日で、起動時に取得した最新順位を使用します。前日の全試合終了・順位反映の確認は行いません。
+
+新スケジュールの有効化は、[切り替え手順](infra/README.md#地区別スケジュールへの切り替え)に従い、コード準備とは別PRで行います。
 
 ### 日程と順位の取得
 
@@ -80,6 +84,16 @@ MLB_API_KEY=xxx dotnet run --project TwitterMlbBot -- --dry-run
 | Lambdaの定期実行 | X | MLBとX |
 
 VSCodeでは、実行構成 **TwitterMlbBot (dry-run / ツイートしない)** を選択してください。
+`--dry-run` 単独では3グループを順に確認します。各グループの表示日を個別に算出し、日程と順位もグループごとに取得します。1地区帯だけを確認する例：
+
+```bash
+dotnet run --project TwitterMlbBot -- --dry-run --group West
+```
+
+`--group` は `East` / `Central` / `West` のいずれかです。通常投稿では指定必須で、不明な引数やグループは接続前に拒否します。数値の引数で順位取得年を指定でき、省略時は表示日の年を使用します（年指定で表示日は変わりません）。Lambdaには `{"group":"East"}` の形式で渡します。グループ欠落・不正値・旧イベントは投稿せずエラーにします。
+
+`.env` はアプリが自動で読み込みません。必要な `MLB_API_KEY` を環境変数へ設定してください。
+
 コードを変更した後は `dotnet format MlbBot.sln` で整形します。
 
 ドライランでは、次の見出しに続いて各順位表の文面が表示されます。

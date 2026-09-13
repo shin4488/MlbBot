@@ -56,42 +56,54 @@ variable "policy_arns" {
   default     = []
 }
 
-variable "schedule_expression" {
-  description = "定期実行スケジュール（例: cron(0 6 * * ? *)）"
+variable "schedule_group_name" {
+  description = "専用Schedulerグループ名"
   type        = string
 }
 
-variable "rule_name" {
-  description = "EventBridgeルール名"
+variable "scheduler_role_name" {
+  description = "Schedulerが対象Lambdaだけを起動するロール名"
   type        = string
 }
 
-variable "rule_description" {
-  description = "EventBridgeルールの説明"
-  type        = string
-  default     = ""
+variable "schedules_enabled" {
+  description = "定期実行を有効にするか。意図しない起動を避けるため既定は無効"
+  type        = bool
+  default     = false
 }
 
-variable "rule_state" {
-  description = "EventBridgeルールの状態（ENABLED / DISABLED）"
-  type        = string
-  default     = "ENABLED"
+variable "schedules" {
+  description = "スケジュール名ごとの実行式・タイムゾーン・Lambdaへ渡すJSON"
+  type = map(object({
+    schedule_expression = string
+    time_zone           = optional(string, "UTC")
+    input               = optional(string)
+  }))
+  validation {
+    condition = alltrue([
+      for schedule in var.schedules : schedule.input == null ? true : can(jsondecode(schedule.input))
+    ])
+    error_message = "inputを指定する場合は有効なJSON文字列を渡してください。"
+  }
 }
 
-variable "event_target_id" {
-  description = "EventBridgeターゲットID（既存リソースをインポートする場合に指定。省略時は自動生成）"
-  type        = string
-  default     = null
-}
-
-variable "permission_statement_id" {
-  description = "Lambda起動許可のステートメントID（既存リソースをインポートする場合に指定。省略時は自動生成）"
-  type        = string
-  default     = null
+variable "initial_code" {
+  description = "新規Lambdaの初回コードを置くS3バケットとキー。省略時は既存関数の管理専用とし、再作成を失敗させる"
+  type = object({
+    s3_bucket = string
+    s3_key    = string
+  })
+  default = null
 }
 
 variable "log_retention_days" {
   description = "CloudWatch Logsの保持日数（nullで無期限）"
   type        = number
   default     = null
+}
+
+variable "scheduler_management_dependencies" {
+  description = "Scheduler作成前に反映が必要な管理用IAMポリシーのID"
+  type        = list(string)
+  default     = []
 }

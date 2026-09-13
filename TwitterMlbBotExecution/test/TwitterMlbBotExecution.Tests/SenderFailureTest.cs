@@ -45,11 +45,11 @@ public class SenderFailureTest
 
         if (allFail)
         {
-            await Assert.ThrowsAnyAsync<Exception>(() => runner.RunAsync(2026, new DateOnly(2026, 7, 1)));
+            await Assert.ThrowsAnyAsync<Exception>(() => runner.RunAsync(2026, new DateOnly(2026, 7, 1), PostingGroup.West));
         }
         else
         {
-            await runner.RunAsync(2026, new DateOnly(2026, 7, 1));
+            await runner.RunAsync(2026, new DateOnly(2026, 7, 1), PostingGroup.West);
         }
 
         Assert.Equal(2, sentTexts.Count);
@@ -95,7 +95,7 @@ public class SenderFailureTest
         public Task<IReadOnlyList<TeamStanding>> GetStandingsAsync(int year) =>
             Task.FromResult<IReadOnlyList<TeamStanding>>(new[]
             {
-                new TeamStanding("First", "AL", "East", 80, 60),
+                new TeamStanding("First", "AL", "West", 80, 60),
                 new TeamStanding("Second", "NL", "West", 90, 50),
             });
     }

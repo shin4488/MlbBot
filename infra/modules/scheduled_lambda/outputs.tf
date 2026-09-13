@@ -13,12 +13,19 @@ output "role_arn" {
   value       = aws_iam_role.this.arn
 }
 
-output "event_rule_arn" {
-  description = "定期実行ルールのARN"
-  value       = aws_cloudwatch_event_rule.this.arn
-}
-
 output "log_group_name" {
   description = "CloudWatch Logsロググループ名"
   value       = aws_cloudwatch_log_group.this.name
+}
+
+output "schedules" {
+  description = "作成するスケジュールの実行設定"
+  value = {
+    for name, schedule in aws_scheduler_schedule.this : name => {
+      schedule_expression = schedule.schedule_expression
+      time_zone           = schedule.schedule_expression_timezone
+      input               = schedule.target[0].input
+      state               = schedule.state
+    }
+  }
 }

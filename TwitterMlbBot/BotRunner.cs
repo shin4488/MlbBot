@@ -37,7 +37,7 @@ namespace TwitterMlbBot
         /// </summary>
         /// <param name="year">対象の西暦年</param>
         /// <param name="date">ツイート文面に表示する日付</param>
-        public async Task RunAsync(int year, DateOnly date)
+        public async Task RunAsync(int year, DateOnly date, PostingGroup group)
         {
             if (await ShouldSkipForOffSeasonAsync(year, date))
             {
@@ -45,7 +45,7 @@ namespace TwitterMlbBot
             }
 
             IReadOnlyList<TeamStanding> standings = await standingsProvider.GetStandingsAsync(year);
-            IReadOnlyList<TweetContent> tweets = composer.ComposeTweets(standings, date);
+            IReadOnlyList<TweetContent> tweets = composer.ComposeTweets(standings, date, group);
 
             // 順位データが存在しない場合（シーズンオフ等）はツイートしない
             if (tweets.Count == 0)

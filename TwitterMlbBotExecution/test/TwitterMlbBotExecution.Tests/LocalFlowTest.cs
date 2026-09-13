@@ -27,9 +27,9 @@ public class LocalFlowTest
     }));
 
     [Theory]
-    [InlineData(7, 31, 6)]
-    [InlineData(8, 1, 8)]
-    [InlineData(9, 27, 8)]
+    [InlineData(7, 31, 2)]
+    [InlineData(8, 1, 4)]
+    [InlineData(9, 27, 4)]
     [InlineData(9, 28, 0)]
     public async Task 日程と順位を取得して当日分の文面をドライラン出力する(int month, int day, int expectedCount)
     {
@@ -38,7 +38,7 @@ public class LocalFlowTest
         var sender = new RecordingDryRunSender(output);
         using var client = CreateClient(calendarJson, StandingsJson, allowStandings: expectedCount > 0);
 
-        await CreateRunner(client, sender).RunAsync(2026, date);
+        await CreateRunner(client, sender).RunAsync(2026, date, PostingGroup.West);
 
         Assert.Equal(expectedCount, sender.Contents.Count);
         Assert.All(sender.Contents, content => Assert.Contains(content.Text, output.ToString()));
@@ -47,7 +47,7 @@ public class LocalFlowTest
             Assert.Empty(output.ToString());
             return;
         }
-        Assert.All(teams, team => Assert.Contains(team.Name, output.ToString()));
+        Assert.All(teams.Where(team => team.Division == "West"), team => Assert.Contains(team.Name, output.ToString()));
         Assert.DoesNotContain("All-Stars", output.ToString());
     }
 
@@ -59,7 +59,7 @@ public class LocalFlowTest
         using var output = new StringWriter();
         using var client = CreateClient(calendarJson, "[]");
 
-        await CreateRunner(client, new DryRunTweetSender(output)).RunAsync(2026, new DateOnly(2026, month, 1));
+        await CreateRunner(client, new DryRunTweetSender(output)).RunAsync(2026, new DateOnly(2026, month, 1), PostingGroup.West);
 
         Assert.Empty(output.ToString());
     }
@@ -74,7 +74,7 @@ public class LocalFlowTest
         using var client = CreateClient(calendarJson, standingsJson);
 
         await Assert.ThrowsAnyAsync<Exception>(() => CreateRunner(client, new DryRunTweetSender(output))
-            .RunAsync(2026, new DateOnly(2026, 8, 1)));
+            .RunAsync(2026, new DateOnly(2026, 8, 1), PostingGroup.West));
 
         Assert.Empty(output.ToString());
     }
@@ -109,15 +109,15 @@ public class LocalFlowTest
         using var client = CreateClient(calendarJson, response.ToJsonString());
 
         await Assert.ThrowsAnyAsync<Exception>(() => CreateRunner(client, new DryRunTweetSender(output))
-            .RunAsync(2026, new DateOnly(2026, 8, 1)));
+            .RunAsync(2026, new DateOnly(2026, 8, 1), PostingGroup.West));
 
         Assert.Empty(output.ToString());
     }
 
     [Theory]
     [InlineData(2, 28, 0)]
-    [InlineData(3, 1, 6)]
-    [InlineData(10, 31, 8)]
+    [InlineData(3, 1, 2)]
+    [InlineData(10, 31, 4)]
     [InlineData(11, 1, 0)]
     public async Task 日程の通信障害時は時期に応じて続行か見送りを決める(int month, int day, int expectedCount)
     {
@@ -125,7 +125,7 @@ public class LocalFlowTest
         var sender = new RecordingDryRunSender(output);
         using var client = CreateClient(null, StandingsJson, allowStandings: expectedCount > 0);
 
-        await CreateRunner(client, sender).RunAsync(2026, new DateOnly(2026, month, day));
+        await CreateRunner(client, sender).RunAsync(2026, new DateOnly(2026, month, day), PostingGroup.West);
 
         Assert.Equal(expectedCount, sender.Contents.Count);
     }
@@ -139,9 +139,56 @@ public class LocalFlowTest
         using var output = new StringWriter();
         using var client = CreateClient(calendar, StandingsJson);
 
-        await CreateRunner(client, new DryRunTweetSender(output)).RunAsync(2026, new DateOnly(2026, 7, 1));
+        await CreateRunner(client, new DryRunTweetSender(output)).RunAsync(2026, new DateOnly(2026, 7, 1), PostingGroup.West);
 
-        Assert.All(teams, team => Assert.Contains(team.Name, output.ToString()));
+        Assert.All(teams.Where(team => team.Division == "West"), team => Assert.Contains(team.Name, output.ToString()));
+    }
+
+    [Theory]
+    [InlineData("East", 7, 31, 2)]
+    [InlineData("East", 8, 1, 2)]
+    [InlineData("Central", 7, 31, 2)]
+    [InlineData("Central", 8, 1, 2)]
+    [InlineData("West", 7, 31, 2)]
+    [InlineData("West", 8, 1, 4)]
+    [InlineData("West", 9, 27, 4)]
+    [InlineData("West", 9, 28, 0)]
+    public async Task 対象地区だけを出力し西部の8月から全地区によるWCを追加する(string group, int month, int day, int count)
+    {
+        using var output = new StringWriter();
+        var sender = new RecordingDryRunSender(output);
+        using var client = CreateClient(calendarJson, StandingsJson, allowStandings: count > 0);
+        var date = new DateOnly(2026, month, day);
+        var selected = Enum.Parse<PostingGroup>(group);
+        await CreateRunner(client, sender).RunAsync(2026, date, selected);
+        Assert.Equal(count, sender.Contents.Count);
+        if (count == 0) return;
+        Assert.Contains(sender.Contents.Take(2), content => content.Text.Contains($"AL {group}"));
+        Assert.Contains(sender.Contents.Take(2), content => content.Text.Contains($"NL {group}"));
+        var composer = new TweetComposer(new HashtagProvider());
+        var expectedDivisions = composer.Compose(DivisionStanding.FromStandings(teams.Where(team => team.Division == group)), date);
+        Assert.Equal(expectedDivisions.Select(content => content.Text), sender.Contents.Take(2).Select(content => content.Text));
+        if (count == 4)
+        {
+            var expectedWildCards = composer.ComposeWildCards(WildCardStanding.FromDivisions(DivisionStanding.FromStandings(teams)), date);
+            Assert.Equal(expectedWildCards.Select(content => content.Text), sender.Contents.Skip(2).Select(content => content.Text));
+        }
+    }
+
+    [Theory]
+    [InlineData("East")]
+    [InlineData("Central")]
+    [InlineData("West")]
+    public async Task 対象外地区の勝敗欠落でも全投稿を止める(string group)
+    {
+        var response = JsonNode.Parse(StandingsJson)!.AsArray();
+        var other = response.First(row => row!["Division"]!.GetValue<string>() != group)!;
+        other.AsObject().Remove("Wins");
+        using var output = new StringWriter();
+        using var client = CreateClient(calendarJson, response.ToJsonString());
+        await Assert.ThrowsAnyAsync<Exception>(() => CreateRunner(client, new DryRunTweetSender(output))
+            .RunAsync(2026, new DateOnly(2026, 8, 1), Enum.Parse<PostingGroup>(group)));
+        Assert.Empty(output.ToString());
     }
 
     private static BotRunner CreateRunner(HttpClient client, ITweetSender sender) => new(

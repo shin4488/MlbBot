@@ -1,3 +1,7 @@
+locals {
+  scheduler_role_name = "mlbbot-scheduler-execution"
+}
+
 module "twitter_mlb_bot" {
   source = "../../modules/scheduled_lambda"
 
@@ -13,14 +17,19 @@ module "twitter_mlb_bot" {
   role_description = "Allows Lambda functions to call AWS services on your behalf."
   # ログ書き込みはモジュール内で専用グループに限定。広域のAWS管理ポリシーは付けない。
 
-  # 毎日06:00 UTC（15:00 JST）に実行
-  schedule_expression = "cron(0 6 * * ? *)"
-  rule_name           = "CronTweetMlbStandings"
-  rule_description    = "1日1回指定の時間に、TwitterでMLBの順位を地区ごとにツイートする"
-
-  # 既存リソースをインポートしたため、作成時に採番されていたIDをそのまま指定している
-  event_target_id         = "aaf74d02-ecf9-4792-b28d-a81f5b4e59b8"
-  permission_statement_id = "lambda-1e02f0e0-9ffc-46fd-9545-f8d41f212d28"
+  schedule_group_name = "mlbbot-standings"
+  scheduler_role_name = local.scheduler_role_name
+  scheduler_management_dependencies = [
+    module.terraform_role.policy_id,
+    aws_iam_user_policy.terraform_iam_bootstrap.id,
+  ]
+  # PR①は無効で作成する。新コードの反映と投稿済み分を確認後、PR②でtrueにする。
+  schedules_enabled = false
+  schedules = {
+    East    = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/New_York", input = jsonencode({ group = "East" }) }
+    Central = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/Chicago", input = jsonencode({ group = "Central" }) }
+    West    = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/Los_Angeles", input = jsonencode({ group = "West" }) }
+  }
 
   # ログの無限成長を防ぐ（運用調査には90日あれば十分）
   log_retention_days = 90

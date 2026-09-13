@@ -27,14 +27,16 @@ namespace TwitterMlbBot.Composing
             this.hashtagProvider = hashtagProvider;
         }
 
-        public IReadOnlyList<TweetContent> ComposeTweets(IReadOnlyList<TeamStanding> standings, DateOnly date)
+        public IReadOnlyList<TweetContent> ComposeTweets(IReadOnlyList<TeamStanding> standings, DateOnly date, PostingGroup group)
         {
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
-            List<TweetContent> tweets = new(Compose(divisions, date));
-            bool shouldIncludeWildCards = date.Month >= PlayoffRaceStartMonth;
+            IReadOnlyList<DivisionStanding> selectedDivisions = divisions
+                .Where(division => division.Division == group.ToString()).ToList();
+            List<TweetContent> tweets = new(Compose(selectedDivisions, date));
+            bool shouldIncludeWildCards = group == PostingGroup.West && date.Month >= PlayoffRaceStartMonth;
             if (shouldIncludeWildCards)
             {
-                // 既存の投稿順（全地区の後にワイルドカード）を維持する
+                // WCは対象地区に絞る前の全地区から計算し、地区投稿の後に追加する
                 IReadOnlyList<WildCardStanding> wildCards = WildCardStanding.FromDivisions(divisions);
                 tweets.AddRange(ComposeWildCards(wildCards, date));
             }

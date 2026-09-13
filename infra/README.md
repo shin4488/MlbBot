@@ -8,7 +8,7 @@ MLBボットのAWSリソースをTerraformで管理する。**関数コードの
 infra/
 ├── .terraform-version        … tfenv用のバージョン固定（global.jsonと同じ発想）
 ├── modules/                  … 共通モジュール（リソース定義の本体）
-│   ├── scheduled_lambda/     … 定期実行Lambda一式（関数 + 実行ロール + ロググループ + EventBridge）
+│   ├── scheduled_lambda/     … 定期実行Lambda一式（関数 + 実行ロール + ロググループ + Scheduler）
 │   ├── monitoring/           … Lambdaエラーの監視一式（SNSトピック + メール購読 + アラーム + エラーログ監視）
 │   ├── github_oidc_role/      … GitHub Actionsの認証とデプロイ用ロール
 │   └── assumable_role/        … 指定ユーザーが利用する管理用ロール
@@ -46,7 +46,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    E["EventBridge<br>実行予定・対象の関数"] -->|このルールからの起動を許可| L["Lambda<br>ボットを実行"]
+    E["EventBridge Scheduler<br>各代表現地時刻の朝8時"] -->|専用ロールで対象Lambdaのみ起動| L["Lambda<br>ボットを実行"]
     R["実行用ロール"] -->|専用ログへの書き込みを許可| L
     L -->|ログを記録| G["CloudWatch Logs<br>専用の保存先"]
     L -->|関数の実行エラー| A["CloudWatchアラーム"]
@@ -72,19 +72,44 @@ AWSの仕様上、対象を指定できない一覧取得操作だけは、全�
 
 自動再試行を止める分、一時的な障害から自動で投稿し直す機会は減る。また、この設定はAWS側の重複配信すべてを防ぐものではない。再実行に対応する場合は、同じ投稿を二重に送らない仕組みも必要になる（[AWSの再試行仕様](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)）。
 
-### 既存環境へ適用するとき
+### 地区別スケジュールへの切り替え
 
-広いログ権限を使い、再試行設定をTerraformで管理していない既存環境では、主に次の変更になる。
+有効・無効は [prod/main.tf](environments/prod/main.tf) の `schedules_enabled` をGit管理する。環境変数やローカルtfvarsで切り替えない。変更は2 PRに分ける。applyは必ず人間が実行する。
 
-| 操作 | 対象 |
-| --- | --- |
-| 追加 | 専用ログへの書き込み権限、関数エラー時の再試行設定 |
-| 更新 | 管理用ロールの利用者を制限する条件、操作できる対象と内容 |
-| 紐付け解除 | Lambda実行用ロールに付いているAWS標準の広いログ権限（AWSLambdaBasicExecutionRole） |
+1. **PR①：新コードと無効なスケジュールを準備。** レビュー後、マージ前にPRのブランチで `make tf-plan` を確認して `make tf-apply` を実行する。旧EventBridgeのルール・ターゲット・Lambda起動許可を削除し、専用Schedulerグループ・起動ロール・3件の無効なスケジュールを作成する。Lambda本体・ログ・監視は維持する。
+2. **停止を確認してPR①をマージ。** 旧スケジュールが消え、新3件がすべてDISABLEDであること、旧呼び出しが実行中・再配送待ちでないことを確認する。停止は既に受け付けた実行を取り消さない。マージでコードの自動デプロイが始まる。ワークフロー成功だけでなく、Lambdaの `LastUpdateStatus` が `Successful` になり、意図したコードが反映されたことを確認する（現在のデプロイ処理は更新完了を待たない）。確認のためにLambdaを実行しない。
+3. **PR②：新スケジュールを有効化。** `schedules_enabled = true` の変更をレビュー・マージし、最新masterで `make tf-plan` と `make tf-apply` を実行する。通常は3件の状態変更だけになる。infraのみの変更ではコードの自動デプロイは走らない。
 
-この変更でLambda本体やログ保存先を作り直すことは想定していない。実際の追加・更新・削除は現在のAWS側の設定とstateによって変わるため、適用前の `terraform plan` で確認する。
+切り替えは新旧の実行時刻から十分離して行う。新しい表示日と、旧投稿の表示日・対象地区を照合し、最初の3グループが同じ対象日を一通り処理でき、投稿済み分と重複しない開始日を選ぶ。旧投稿がその日分を送信済みなら、その新枠は有効にせず、必要なら翌日の東部枠より前まで停止を維持する。停止中の枠は後からまとめて投稿しない。
 
-関数コードはGitHub Actions、APIキーなどの環境変数はLambda側で管理する。既存関数では `ignore_changes` により、Terraformがコードや環境変数を上書きしない。コード指定のダミーS3参照は、誤って関数を再作成しようとした際に失敗させるためのものであり、新規作成用のコードではない。
+移行applyではTerraform管理ロール自身のScheduler権限も追加する。plan成功は変更APIの許可・IAM反映完了の保証ではない。権限不足なら、正式なポリシーへの反映を人間が確認してからplanを取り直す（[権限更新時の注意](#権限を追加するapplyでその権限を使う操作が拒否された場合)）。部分失敗時はPR①をマージせず、旧停止・新無効の状態が揃うまで確認する。
+
+ロールバックもまず新3件を無効化する変更をレビュー・applyし、実行が終了したことを確認する。その後、旧コードと旧スケジュールを無効状態で戻す。旧コード反映と当日の投稿状況を確認してから旧ルールを有効化する。新コードは旧イベントを拒否し、旧コードは新イベントのグループを無視して全地区を投稿するため、コードとイベントの組み合わせを崩さない。
+
+Schedulerは専用グループと同一アカウントからのみ実行ロールを引き受けられ、対象Lambdaの起動だけを許可する。信頼条件のSourceArnは個別スケジュールではなくグループARNを指定する（[AWS仕様](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html)）。SchedulerとLambdaの関数エラー再試行はともに0回とし、投稿履歴の保存は追加しない。AWS側の重複配送の可能性は残る。
+
+関数コードはGitHub Actions、APIキーなどの環境変数はLambda側で管理する。既存関数では `ignore_changes` により、Terraformがコードや環境変数を上書きしない。この本番設定は初回コードを指定しないため、ダミーS3参照によって誤った関数の再作成を失敗させる。
+
+## モジュールを別用途で使う場合
+
+`scheduled_lambda` は1つのLambdaを任意の件数のSchedulerで起動する。`schedules` のキーがスケジュール名になり、各値に `schedule_expression`、`time_zone`（省略時UTC）、`input`（省略可のJSON文字列）を渡す。MLBの地区名や朝8時という条件はprod側だけに置く。
+
+```hcl
+schedules = {
+  cleanup = {
+    schedule_expression = "rate(2 hours)"
+    input               = jsonencode({ task = "cleanup", limit = 25 })
+  }
+  report = {
+    schedule_expression = "cron(30 9 ? * MON *)"
+    time_zone           = "Asia/Tokyo"
+  }
+}
+```
+
+新規Lambdaを作る場合は `initial_code = { s3_bucket = "…", s3_key = "…" }` に初回コードのS3参照を渡す。コードの準備と作成権限は呼び出し側で用意する。省略時は従来どおり既存関数の管理専用で、誤再作成を失敗させる。作成後のコード配布・環境変数はTerraform管理外という責務を維持する。
+
+スケジュールは既定で無効、実行時刻の柔軟な遅延は無効、Schedulerの自動再試行は0回とする。任意のAWSサービスを起動する仕組みや、全設定を切り替える汎用基盤には広げない。実行ロールの信頼先と操作対象の制限も共通で維持する。
 
 ## 初回セットアップ（clone直後）
 
@@ -111,13 +136,13 @@ make tf-plan    # 既存インフラと一致していれば「No changes」に�
 | `make tf-plan` | 本番との差分を確認 |
 | `make tf-apply` | 差分を確認し、`yes` で適用（人間が実行） |
 | `make tf-fmt tf-validate` | infra全体の書式整形・設定検証 |
-| `make tf-test` | テスト対象モジュールの準備・テスト |
+| `make tf-test` | テスト対象モジュール・環境設定の準備・モックテスト |
 
 - `.env` はGit管理外。プロファイル名だけを読み、未設定なら接続前に停止する。APIキーやターミナル全体の設定には触れない。
 - 一時的な切り替え：`make tf-plan TF_AWS_PROFILE=<プロファイル名>`
 - Terraformを直接使う場合：`infra/environments/prod` でプロファイルを指定して実行。
 - モジュールのテスト：`make tf-test` で初期化からまとめて実行。
-  `tests/` でロールの利用者・Lambdaのログ権限・再試行設定を検証する。
+  `modules/*/tests/` でロールの利用者・ログ権限・任意のスケジュール設定を、`environments/prod/tests/` でMLB固有の3グループ・朝8時・無効状態を検証する。
   全providerをモック化し、planだけで判定するため、AWSの認証情報や本番stateは使わない。
 
 ### planでIAMユーザーの情報取得が拒否された場合

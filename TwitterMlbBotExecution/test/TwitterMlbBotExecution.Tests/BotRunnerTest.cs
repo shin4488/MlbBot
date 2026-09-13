@@ -70,8 +70,8 @@ public class BotRunnerTest
     {
         return new List<TeamStanding>
         {
-            Teams.Create("AL", "Central", "White Sox", 84, 56),
-            Teams.Create("AL", "Central", "Astros", 70, 70),
+            Teams.Create("AL", "West", "Mariners", 84, 56),
+            Teams.Create("AL", "West", "Astros", 70, 70),
             Teams.Create("NL", "West", "Dodgers", 82, 48),
             Teams.Create("NL", "West", "Rockies", 60, 70),
         };
@@ -100,14 +100,14 @@ public class BotRunnerTest
     }
 
     [Fact]
-    public async Task RunAsync_取得した順位から組み立てた全地区分を送信する()
+    public async Task RunAsync_取得した順位から組み立てた対象グループの両リーグ分を送信する()
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.Equal(2, sender.SentContents.Count);
-        Assert.Contains(sender.SentContents, content => content.Contains("White Sox"));
+        Assert.Contains(sender.SentContents, content => content.Contains("Mariners"));
         Assert.Contains(sender.SentContents, content => content.Contains("Dodgers"));
     }
 
@@ -116,7 +116,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026, julyDate);
+        await CreateRunner(new List<TeamStanding>(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.Empty(sender.SentContents);
     }
@@ -127,7 +127,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender(_ => false);
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate));
+            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class BotRunnerTest
         // 重複コンテンツ拒否など、一部失敗は正常系でも起きるため
         var sender = new FakeTweetSender(content => content.Contains("Dodgers"));
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.Equal(2, sender.SentContents.Count);
     }
@@ -146,9 +146,9 @@ public class BotRunnerTest
     {
         // タイムアウト等で送信先が例外を投げても、その1件の失敗にとどめて他の地区は投稿する仕様
         var sender = new FakeTweetSender(content =>
-            content.Contains("White Sox") ? throw new HttpRequestException("送信失敗") : true);
+            content.Contains("Mariners") ? throw new HttpRequestException("送信失敗") : true);
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.Equal(2, sender.SentContents.Count);
         Assert.Contains(sender.SentContents, content => content.Contains("Dodgers"));
@@ -161,7 +161,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender(_ => throw new HttpRequestException("送信失敗"));
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate));
+            () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West));
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, augustDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, augustDate, PostingGroup.West);
 
         // 地区2件 + 各リーグのワイルドカード2件
         Assert.Equal(4, sender.SentContents.Count);
@@ -181,7 +181,7 @@ public class BotRunnerTest
     {
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         Assert.DoesNotContain(sender.SentContents, content => content.Contains("Wild Card"));
     }
@@ -192,7 +192,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender();
         var standingsProvider = new FakeStandingsProvider(CreateTwoDivisionStandings());
 
-        await CreateRunner(standingsProvider, sender).RunAsync(2026, seasonEndDate.AddDays(1));
+        await CreateRunner(standingsProvider, sender).RunAsync(2026, seasonEndDate.AddDays(1), PostingGroup.West);
 
         Assert.Empty(sender.SentContents);
         // オフシーズン中のMLB API呼び出し（クォータ消費）も止める仕様
@@ -205,7 +205,7 @@ public class BotRunnerTest
         // 最終戦の結果を反映した最終順位はツイートされること（境界）
         var sender = new FakeTweetSender();
 
-        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, seasonEndDate);
+        await CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, seasonEndDate, PostingGroup.West);
 
         Assert.NotEmpty(sender.SentContents);
     }
@@ -222,7 +222,7 @@ public class BotRunnerTest
             () => throw new InvalidOperationException("シーズン日程の取得失敗"));
 
         await CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
-            .RunAsync(2026, new DateOnly(2026, month, 15));
+            .RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West);
 
         Assert.NotEmpty(sender.SentContents);
     }
@@ -234,10 +234,10 @@ public class BotRunnerTest
         var sender = new FakeTweetSender();
         var standings = new List<TeamStanding>
         {
-            Teams.Create("AL", "Central", new string('A', 300), 84, 56),
+            Teams.Create("AL", "West", new string('A', 300), 84, 56),
         };
 
-        await CreateRunner(standings, sender).RunAsync(2026, julyDate);
+        await CreateRunner(standings, sender).RunAsync(2026, julyDate, PostingGroup.West);
 
         string sent = Assert.Single(sender.SentContents);
         Assert.True(sent.Length > TweetContent.CharacterLimit, "上限超過の文面が題材になっていること");
@@ -257,7 +257,7 @@ public class BotRunnerTest
             () => throw new InvalidOperationException("シーズン日程の取得失敗"));
 
         await CreateRunner(standingsProvider, sender, failingProvider)
-            .RunAsync(2026, new DateOnly(2026, month, 15));
+            .RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West);
 
         Assert.Empty(sender.SentContents);
         Assert.Equal(0, standingsProvider.CallCount);
