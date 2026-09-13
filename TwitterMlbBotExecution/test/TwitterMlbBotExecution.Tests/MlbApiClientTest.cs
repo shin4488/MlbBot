@@ -11,6 +11,21 @@ namespace TwitterMlbBotExecution.Tests;
 public class MlbApiClientTest
 {
     [Theory]
+    [InlineData("null", "届いていない")]
+    [InlineData("[null]", "成績が欠けている")]
+    [InlineData("[{}]", "勝ち数")]
+    [InlineData("[{\"Wins\":1}]", "負け数")]
+    [InlineData("[{\"Name\":\"Example\",\"League\":\"AL\",\"Division\":\"East\",\"Wins\":1,\"Losses\":0}]", "構成と一致しない")]
+    public void ParseStandings_データ不備は例外を連鎖させず対象年と理由を伝える(string responseBody, string reason)
+    {
+        Exception exception = Assert.ThrowsAny<Exception>(() => MlbApiClient.ParseStandings(2025, responseBody));
+
+        Assert.Null(exception.InnerException);
+        Assert.Contains("2025年", exception.Message);
+        Assert.Contains(reason, exception.Message);
+    }
+
+    [Theory]
     [InlineData("null")]
     [InlineData("[{}]")]
     [InlineData("[null]")]
@@ -31,7 +46,7 @@ public class MlbApiClientTest
             responseBody = response.ToJsonString();
         }
         // 正常な空配列と、取得したデータの欠落・破損は区別する
-        Assert.ThrowsAny<Exception>(() => MlbApiClient.ParseStandings(responseBody));
+        Assert.ThrowsAny<Exception>(() => MlbApiClient.ParseStandings(2026, responseBody));
     }
 
     [Fact]
@@ -44,7 +59,7 @@ public class MlbApiClientTest
 
         JsonArray response = StandingsFixture.CreateResponse();
         response[0] = JsonNode.Parse(responseBody)![0]!.DeepClone();
-        TeamStanding team = Assert.Single(MlbApiClient.ParseStandings(response.ToJsonString()), team => team.Name == "Yankees");
+        TeamStanding team = Assert.Single(MlbApiClient.ParseStandings(2026, response.ToJsonString()), team => team.Name == "Yankees");
 
         Assert.Equal("Yankees", team.Name);
         Assert.Equal("AL", team.League);
@@ -61,7 +76,7 @@ public class MlbApiClientTest
         response.Add(JsonNode.Parse("""{"Name":"AL All-Stars","League":"AL","Division":"AL"}"""));
         response.Add(JsonNode.Parse("""{"Name":"NL All-Stars","League":"NL","Division":"NL"}"""));
 
-        IReadOnlyList<TeamStanding> teams = MlbApiClient.ParseStandings(response.ToJsonString());
+        IReadOnlyList<TeamStanding> teams = MlbApiClient.ParseStandings(2026, response.ToJsonString());
 
         Assert.Equal(StandingsFixture.Teams, teams);
     }
@@ -70,6 +85,6 @@ public class MlbApiClientTest
     public void ParseStandings_空の配列なら空リストを返す()
     {
         // シーズン開始前はAPIが空配列を返す（実測済み）
-        Assert.Empty(MlbApiClient.ParseStandings("[]"));
+        Assert.Empty(MlbApiClient.ParseStandings(2026, "[]"));
     }
 }

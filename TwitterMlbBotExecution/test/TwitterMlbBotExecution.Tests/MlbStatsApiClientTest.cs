@@ -30,7 +30,7 @@ public class MlbStatsApiClientTest
     [InlineData("""{"seasons":[{"seasonId":"2026","regularSeasonEndDate":"2026-09-27"},{"seasonId":"2026","regularSeasonEndDate":"2026-10-01"}]}""")]
     public void ParseSeasonCalendar_対象シーズンを特定できない日程は使わない(string responseBody)
     {
-        Assert.ThrowsAny<Exception>(() => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
+        Assert.Throws<MlbApiException>(() => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
     }
 
     [Theory]
@@ -43,7 +43,7 @@ public class MlbStatsApiClientTest
     [InlineData("not-json")]
     public void ParseSeasonCalendar_不正な日程や対象年と異なる日程は使わない(string responseBody)
     {
-        Assert.ThrowsAny<Exception>(() => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
+        Assert.Throws<MlbApiException>(() => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class MlbStatsApiClientTest
     public void ParseSeasonCalendar_シーズン情報が欠けていたら例外を投げる(string responseBody)
     {
         // シーズンなし・終了日フィールド欠落のどちらでも、判定不能のまま投稿可否を決めない仕様
-        Assert.ThrowsAny<Exception>(
+        Assert.Throws<MlbApiException>(
             () => MlbStatsApiClient.ParseSeasonCalendar(responseBody, 2026));
     }
 }

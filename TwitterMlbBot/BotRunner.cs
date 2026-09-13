@@ -86,7 +86,7 @@ namespace TwitterMlbBot
 
         /// <summary>
         /// ツイートを1件送信し、成否を返す。
-        /// 送信先が例外を投げた場合（タイムアウト・ネットワーク障害等）も「その1件の失敗」として扱い、
+        /// HTTPタイムアウト・ネットワーク障害は「その1件の失敗」として扱い、
         /// 残りの地区のツイートまで道連れにしない。全件失敗した場合の扱いは呼び出し側が決める
         /// </summary>
         private async Task<bool> TrySendAsync(TweetContent tweetContent)
@@ -95,12 +95,17 @@ namespace TwitterMlbBot
             {
                 return await tweetSender.SendAsync(tweetContent);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (IsHttpFailure(exception))
             {
                 logger.LogError(exception, "この文面の投稿に失敗しました。残りの文面の投稿は続けます");
                 return false;
             }
         }
+
+        // HttpClientのタイムアウトだけを回復対象にし、通常のキャンセルや実装不具合は伝播させる。
+        private static bool IsHttpFailure(Exception exception) =>
+            exception is HttpRequestException
+            || (exception is OperationCanceledException && exception.InnerException is TimeoutException);
 
         /// <summary>
         /// シーズン状況からツイートを見送るべきかを判定する。
@@ -114,7 +119,7 @@ namespace TwitterMlbBot
             {
                 season = await seasonCalendarProvider.GetSeasonCalendarAsync(year);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is MlbApiException || IsHttpFailure(exception))
             {
                 if (SeasonCalendar.IsClearlyOffSeason(date))
                 {

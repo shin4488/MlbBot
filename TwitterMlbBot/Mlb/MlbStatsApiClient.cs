@@ -46,19 +46,21 @@ namespace TwitterMlbBot.Mlb
         /// </summary>
         internal static SeasonCalendar ParseSeasonCalendar(string responseBody, int year)
         {
+            SeasonsResponse parsed;
             try
             {
-                SeasonsResponse parsed = JsonSerializer.Deserialize<SeasonsResponse>(responseBody)
-                    ?? throw new InvalidOperationException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
-
-                SeasonResponse season = parsed.GetSeason(year);
-                return season.ToSeasonCalendar(year);
+                parsed = JsonSerializer.Deserialize<SeasonsResponse>(responseBody)
+                    ?? throw new MlbApiException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
             }
-            catch (JsonException)
+            catch (JsonException exception)
             {
-                // 解析エラーの詳細に応答本文が混ざるため、外へ渡すのは業務上の影響だけにする。
-                throw new InvalidOperationException($"MLB公式の{year}年の日程情報を読み取れないため、シーズン終了を判断できません。");
+                // Message・Path・内部例外には応答の断片が入りうるため、数値の解析位置だけを残す。
+                throw new MlbApiException(
+                    $"MLB公式の{year}年の日程情報の解析に失敗したため、シーズン終了を判断できません。（0始まりの行番号: {exception.LineNumber?.ToString() ?? "不明"}、行内バイト位置: {exception.BytePositionInLine?.ToString() ?? "不明"}）");
             }
+
+            SeasonResponse season = parsed.GetSeason(year);
+            return season.ToSeasonCalendar(year);
         }
 
         // Stats APIレスポンスの形（このクライアント内だけの転送用の型。ドメインにはSeasonCalendarへ変換して渡す）
@@ -75,7 +77,7 @@ namespace TwitterMlbBot.Mlb
                 bool canIdentifySeason = matchingSeasons.Length == 1;
                 if (!canIdentifySeason)
                 {
-                    throw new InvalidOperationException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
+                    throw new MlbApiException($"MLB公式の日程情報から{year}年のシーズンを特定できないため、シーズン終了を判断できません。");
                 }
 
                 return matchingSeasons[0];
@@ -89,13 +91,13 @@ namespace TwitterMlbBot.Mlb
             public SeasonCalendar ToSeasonCalendar(int year)
             {
                 DateOnly endDate = RegularSeasonEndDate
-                    ?? throw new InvalidOperationException($"MLB公式の日程情報に{year}年のレギュラーシーズン終了日が記載されていません。");
+                    ?? throw new MlbApiException($"MLB公式の日程情報に{year}年のレギュラーシーズン終了日が記載されていません。");
                 bool isRequestedSeason = endDate.Year == year;
                 // 別の年の日程による誤った投稿停止を防ぐため、この応答は取得失敗として扱う。
                 // BotRunnerの日程取得失敗時の方針に従い、シーズン中でありうる時期は投稿を続ける。
                 if (!isRequestedSeason)
                 {
-                    throw new InvalidOperationException($"対象は{year}年ですが、取得した終了日が{endDate.Year}年になっているため、シーズン終了を判断できません。");
+                    throw new MlbApiException($"対象は{year}年ですが、取得した終了日が{endDate.Year}年になっているため、シーズン終了を判断できません。");
                 }
 
                 return new SeasonCalendar(endDate);
