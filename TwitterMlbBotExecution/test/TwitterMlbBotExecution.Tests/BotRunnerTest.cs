@@ -164,6 +164,84 @@ public class BotRunnerTest
             () => CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West));
     }
 
+    [Theory]
+    [InlineData("bug", false)]
+    [InlineData("bug", true)]
+    [InlineData("argument", false)]
+    [InlineData("argument", true)]
+    [InlineData("cancel", false)]
+    [InlineData("cancel", true)]
+    [InlineData("task-cancel", false)]
+    [InlineData("task-cancel", true)]
+    public async Task RunAsync_送信の不具合とキャンセルは成功済み投稿の有無によらずそのまま伝える(string failure, bool afterSuccess)
+    {
+        Exception original = CreateUnexpectedFailure(failure);
+        int attempts = 0;
+        var sender = new FakeTweetSender(_ =>
+        {
+            if (++attempts == 1 && afterSuccess) return true;
+            throw original;
+        });
+
+        Exception actual = await Assert.ThrowsAnyAsync<Exception>(() =>
+            CreateRunner(CreateTwoDivisionStandings(), sender).RunAsync(2026, julyDate, PostingGroup.West));
+
+        Assert.Same(original, actual);
+        Assert.Equal(afterSuccess ? 2 : 1, sender.SentContents.Count);
+    }
+
+    [Theory]
+    [InlineData(1, "bug")]
+    [InlineData(7, "bug")]
+    [InlineData(1, "argument")]
+    [InlineData(7, "argument")]
+    [InlineData(1, "cancel")]
+    [InlineData(7, "cancel")]
+    [InlineData(1, "task-cancel")]
+    [InlineData(7, "task-cancel")]
+    public async Task RunAsync_日程取得の不具合とキャンセルは季節によらずそのまま伝える(int month, string failure)
+    {
+        Exception original = CreateUnexpectedFailure(failure);
+        var sender = new FakeTweetSender();
+        var standings = new FakeStandingsProvider(CreateTwoDivisionStandings());
+        var calendar = new FakeSeasonCalendarProvider(() => throw original);
+
+        Exception actual = await Assert.ThrowsAnyAsync<Exception>(() =>
+            CreateRunner(standings, sender, calendar).RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West));
+
+        Assert.Same(original, actual);
+        Assert.Equal(0, standings.CallCount);
+        Assert.Empty(sender.SentContents);
+    }
+
+    private static Exception CreateUnexpectedFailure(string failure) => failure switch
+    {
+        "bug" => new InvalidOperationException("テスト用の実装不具合"),
+        "argument" => new ArgumentException("テスト用の不正な引数"),
+        "cancel" => new OperationCanceledException(),
+        "task-cancel" => new TaskCanceledException(),
+        _ => throw new ArgumentException("未定義のテスト条件"),
+    };
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(7, false)]
+    [InlineData(1, true)]
+    [InlineData(7, true)]
+    public async Task RunAsync_日程の通信障害とHTTPタイムアウトは季節に応じて回復する(int month, bool timeout)
+    {
+        Exception failure = timeout
+            ? new TaskCanceledException("テスト用のタイムアウト", new TimeoutException())
+            : new HttpRequestException("テスト用の通信障害");
+        var sender = new FakeTweetSender();
+        var calendar = new FakeSeasonCalendarProvider(() => throw failure);
+
+        await CreateRunner(CreateTwoDivisionStandings(), sender, calendar)
+            .RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West);
+
+        Assert.Equal(month == 7 ? 2 : 0, sender.SentContents.Count);
+    }
+
     [Fact]
     public async Task RunAsync_8月以降はワイルドカードもあわせて送信する()
     {
@@ -219,7 +297,7 @@ public class BotRunnerTest
         // statsapiの障害でツイートを止めない仕様（エラーログはログ監視アラームが拾いメール通知される）
         var sender = new FakeTweetSender();
         var failingProvider = new FakeSeasonCalendarProvider(
-            () => throw new InvalidOperationException("シーズン日程の取得失敗"));
+            () => throw new MlbApiException("シーズン日程の取得失敗"));
 
         await CreateRunner(CreateTwoDivisionStandings(), sender, failingProvider)
             .RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West);
@@ -254,7 +332,7 @@ public class BotRunnerTest
         var sender = new FakeTweetSender();
         var standingsProvider = new FakeStandingsProvider(CreateTwoDivisionStandings());
         var failingProvider = new FakeSeasonCalendarProvider(
-            () => throw new InvalidOperationException("シーズン日程の取得失敗"));
+            () => throw new MlbApiException("シーズン日程の取得失敗"));
 
         await CreateRunner(standingsProvider, sender, failingProvider)
             .RunAsync(2026, new DateOnly(2026, month, 15), PostingGroup.West);

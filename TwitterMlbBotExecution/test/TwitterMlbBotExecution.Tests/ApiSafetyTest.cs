@@ -90,6 +90,19 @@ public class ApiSafetyTest
     }
 
     [Fact]
+    public void 日程の解析失敗は対象年と解析位置を残し例外を連鎖させない()
+    {
+        Exception exception = Assert.ThrowsAny<Exception>(() =>
+            MlbStatsApiClient.ParseSeasonCalendar("{\n秘", 2025));
+
+        Assert.Null(exception.InnerException);
+        Assert.Contains("2025年", exception.Message);
+        Assert.Contains("行番号: 1", exception.Message);
+        Assert.Contains("行内バイト位置: 0", exception.Message);
+        Assert.DoesNotContain("秘", exception.ToString());
+    }
+
+    [Fact]
     public async Task 順位の解析失敗は対象年と解析位置を残し応答内容を漏らさない()
     {
         const string privateContent = "dummy-private-property";

@@ -36,7 +36,7 @@ public class SenderFailureTest
             return failure switch
             {
                 "network" => throw new HttpRequestException("テスト用の通信障害"),
-                "timeout" => throw new TaskCanceledException("テスト用のタイムアウト"),
+                "timeout" => throw new TaskCanceledException("テスト用のタイムアウト", new TimeoutException()),
                 _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
             };
         }));
