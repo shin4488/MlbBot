@@ -38,9 +38,9 @@ tf-fmt:
 tf-validate:
 	cd infra/environments/prod && terraform validate
 
-# 本番のバックエンドには接続せず、testsがあるモジュールだけを単独で検証する。
+# 本番のバックエンドには接続せず、testsがあるモジュールと環境設定をモックで検証する。
 tf-test:
-	@set -e; for tests_dir in infra/modules/*/tests; do \
+	@set -e; for tests_dir in infra/modules/*/tests infra/environments/*/tests; do \
 	  [ -d "$$tests_dir" ] || continue; \
 	  (cd "$${tests_dir%/tests}" && \
 	    terraform init -backend=false -input=false && \

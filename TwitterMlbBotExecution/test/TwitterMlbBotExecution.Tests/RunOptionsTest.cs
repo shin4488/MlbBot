@@ -1,88 +1,85 @@
+using System.Globalization;
 using TwitterMlbBot;
 using Xunit;
 
 namespace TwitterMlbBotExecution.Tests;
 
-/// <summary>
-/// 実行オプション解析（RunOptions.Parse）のテスト
-/// 純粋関数のため、Lambda相当（argsなし）・年またぎなどの境界も固定入力で検証できる
-/// </summary>
 public class RunOptionsTest
 {
+    private static readonly DateTime now = new(2026, 8, 2, 15, 0, 0, DateTimeKind.Utc);
+
     [Theory]
-    [InlineData("false")]
-    [InlineData("")]
-    public void Parse_環境変数がtrueでなくても明示したdryRun引数を優先する(string environmentValue)
+    [InlineData("East", "2026-07-01T12:00:00Z", "2026-06-30")]
+    [InlineData("Central", "2026-07-01T13:00:00Z", "2026-06-30")]
+    [InlineData("West", "2026-07-01T15:00:00Z", "2026-06-30")]
+    [InlineData("East", "2026-01-01T13:00:00Z", "2025-12-31")]
+    [InlineData("Central", "2026-01-01T14:00:00Z", "2025-12-31")]
+    [InlineData("West", "2026-01-01T16:00:00Z", "2025-12-31")]
+    [InlineData("East", "2026-03-08T12:00:00Z", "2026-03-07")]
+    [InlineData("Central", "2026-03-08T13:00:00Z", "2026-03-07")]
+    [InlineData("West", "2026-03-08T15:00:00Z", "2026-03-07")]
+    [InlineData("East", "2026-11-01T13:00:00Z", "2026-10-31")]
+    [InlineData("Central", "2026-11-01T14:00:00Z", "2026-10-31")]
+    [InlineData("West", "2026-11-01T16:00:00Z", "2026-10-31")]
+    [InlineData("West", "2028-03-01T16:00:00Z", "2028-02-29")]
+    [InlineData("East", "2026-08-02T03:59:59Z", "2026-07-31")]
+    [InlineData("East", "2026-08-02T04:00:00Z", "2026-08-01")]
+    [InlineData("Central", "2026-08-02T04:59:59Z", "2026-07-31")]
+    [InlineData("Central", "2026-08-02T05:00:00Z", "2026-08-01")]
+    [InlineData("West", "2026-08-02T06:59:59Z", "2026-07-31")]
+    [InlineData("West", "2026-08-02T07:00:00Z", "2026-08-01")]
+    public void グループの現地前日とその年を使用する(string group, string instant, string expected)
     {
-        Assert.True(RunOptions.Parse(new[] { "2026", "--dry-run" }, environmentValue, seasonUtcNow).DryRun);
+        var option = Assert.Single(RunOptions.Parse(["--group", group], null,
+            DateTime.Parse(instant, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal)));
+        var date = DateOnly.ParseExact(expected, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        Assert.Equal(date, option.Date);
+        Assert.Equal(date.Year, option.Year);
+        Assert.Equal(group, option.Group.ToString());
+        Assert.False(option.DryRun);
     }
 
-    private static readonly DateTime seasonUtcNow = new DateTime(2026, 8, 29, 6, 0, 0, DateTimeKind.Utc);
-
     [Fact]
-    public void Parse_dryRun引数でドライランになる()
+    public void 全地区ドライランも各現地日付を使う()
     {
-        var options = RunOptions.Parse(new[] { "--dry-run" }, null, seasonUtcNow);
-
-        Assert.True(options.DryRun);
+        var options = RunOptions.Parse(["--dry-run"], null, new DateTime(2026, 8, 2, 5, 30, 0, DateTimeKind.Utc));
+        Assert.Equal(new[] { PostingGroup.East, PostingGroup.Central, PostingGroup.West }, options.Select(option => option.Group));
+        Assert.Equal(new[] { new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1), new DateOnly(2026, 7, 31) }, options.Select(option => option.Date));
+        Assert.All(options, option => Assert.True(option.DryRun));
     }
 
     [Theory]
     [InlineData("true")]
     [InlineData("TRUE")]
-    public void Parse_環境変数DRY_RUNがtrueならドライランになる(string environmentValue)
+    public void 環境変数だけでも全地区ドライランになる(string value)
     {
-        var options = RunOptions.Parse(null, environmentValue, seasonUtcNow);
-
-        Assert.True(options.DryRun);
+        Assert.All(RunOptions.Parse(null, value, now), option => Assert.True(option.DryRun));
     }
 
     [Fact]
-    public void Parse_Lambda相当の入力では通常送信になる()
+    public void 明示したドライランと対象年を優先する()
     {
-        // Lambda経由の実行: argsはnull・DRY_RUN未設定
-        var options = RunOptions.Parse(null, null, seasonUtcNow);
-
-        Assert.False(options.DryRun);
+        var option = Assert.Single(RunOptions.Parse(["--dry-run", "2025", "--group", "West"], "false", now));
+        Assert.True(option.DryRun);
+        Assert.Equal(2025, option.Year);
+        Assert.Equal(new DateOnly(2026, 8, 1), option.Date);
     }
 
-    [Fact]
-    public void Parse_数値の引数があればその年を対象とする()
+    [Theory]
+    [InlineData("")]
+    [InlineData("--group")]
+    [InlineData("--group east")]
+    [InlineData("--group All")]
+    [InlineData("--group 0")]
+    [InlineData("--group East,West")]
+    [InlineData("--group East --group West")]
+    [InlineData("--dry-run --group unknown")]
+    [InlineData("--dry-rnu --group East")]
+    [InlineData("--dry-run 0")]
+    [InlineData("--dry-run 10000")]
+    [InlineData("--dry-run 2025 2026")]
+    public void 不正入力は投稿対象を補完せず拒否する(string arguments)
     {
-        var options = RunOptions.Parse(new[] { "--dry-run", "2025" }, null, seasonUtcNow);
-
-        Assert.Equal(2025, options.Year);
-    }
-
-    [Fact]
-    public void Parse_年の指定がなければ日本時間の現在年を対象とする()
-    {
-        var options = RunOptions.Parse(null, null, seasonUtcNow);
-
-        Assert.Equal(2026, options.Year);
-    }
-
-    [Fact]
-    public void Parse_表示用の日付は直近の試合日_日本時間の前日_になる()
-    {
-        // UTC 2026-08-29 21:00 = JST 2026-08-30 06:00 → 試合日はその前日
-        var eveningUtc = new DateTime(2026, 8, 29, 21, 0, 0, DateTimeKind.Utc);
-
-        var options = RunOptions.Parse(null, null, eveningUtc);
-
-        Assert.Equal(new DateOnly(2026, 8, 29), options.Date);
-    }
-
-    [Fact]
-    public void Parse_年の境界は日本時間基準で判定される()
-    {
-        // UTCではまだ大晦日だが、日本時間では年が明けている時刻
-        var newYearEveUtc = new DateTime(2026, 12, 31, 16, 0, 0, DateTimeKind.Utc);
-
-        var options = RunOptions.Parse(null, null, newYearEveUtc);
-
-        Assert.Equal(2027, options.Year);
-        // 表示用の日付は試合日（日本時間の前日）
-        Assert.Equal(new DateOnly(2026, 12, 31), options.Date);
+        Assert.ThrowsAny<ArgumentException>(() => RunOptions.Parse(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries), null, now));
     }
 }

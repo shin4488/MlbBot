@@ -19,11 +19,11 @@ namespace TwitterMlbBot
         /// エントリーポイント
         /// WebAPI接続の関係で非同期エントリーポイントとしている
         /// </summary>
-        /// <param name="args">コマンドライン引数（Lambda経由の実行ではnull）</param>
+        /// <param name="args">起動引数（Lambdaでは検証対象のグループを渡す）</param>
         /// <returns></returns>
         public static async Task Main(string[]? args)
         {
-            RunOptions options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
+            IReadOnlyList<RunOptions> options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
 
             // Lambda環境ではコンソール出力がそのままCloudWatch Logsに流れる
             using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
@@ -35,7 +35,7 @@ namespace TwitterMlbBot
                 httpClient,
                 RequireEnvironmentVariable("MLB_API_KEY"),
                 loggerFactory.CreateLogger<MlbApiClient>());
-            ITweetSender tweetSender = options.DryRun
+            ITweetSender tweetSender = options[0].DryRun
                 ? new DryRunTweetSender(Console.Out)
                 : new TwitterApiSender(
                     httpClient,
@@ -52,7 +52,12 @@ namespace TwitterMlbBot
                 tweetSender,
                 loggerFactory.CreateLogger<BotRunner>());
 
-            await runner.RunAsync(options.Year, options.Date);
+            // 通常投稿は指定された1グループだけを実行する。
+            // グループ未指定のドライランでは、各地の表示日と投稿範囲を確認するため3グループを順に実行する。
+            foreach (RunOptions option in options)
+            {
+                await runner.RunAsync(option.Year, option.Date, option.Group);
+            }
         }
 
         /// <summary>

@@ -1,6 +1,8 @@
 data "aws_caller_identity" "current" {}
 
 locals {
+  # 新ロールの作成前に管理権限を付与するため、リソースへの参照で作成待ちにしない。
+  scheduler_role_arn  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.scheduler_role_name}"
   terraform_role_name = "mlbbot-terraform-execution"
   # ロール自身に付与するポリシーが自分のARNを参照すると循環になるため、名前からARNを組み立てる
   terraform_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.terraform_role_name}"
@@ -21,7 +23,7 @@ resource "aws_iam_user_policy" "terraform_iam_bootstrap" {
         Sid      = "Roles"
         Effect   = "Allow"
         Action   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole"]
-        Resource = [module.twitter_mlb_bot.role_arn, module.deploy_role.role_arn, local.terraform_role_arn]
+        Resource = [module.twitter_mlb_bot.role_arn, local.scheduler_role_arn, module.deploy_role.role_arn, local.terraform_role_arn]
       },
       {
         Sid      = "Oidc"
@@ -94,10 +96,32 @@ module "terraform_role" {
         Resource = module.twitter_mlb_bot.function_arn
       },
       {
-        Sid      = "EventBridge"
+        Sid    = "EventBridge"
+        Effect = "Allow"
+        Action = ["events:Describe*", "events:List*", "events:PutRule", "events:DeleteRule", "events:PutTargets", "events:RemoveTargets", "events:EnableRule", "events:DisableRule", "events:TagResource", "events:UntagResource"]
+        # 旧ルールを削除する移行applyでも必要。新リソースのARNへ置き換えない。
+        Resource = "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:rule/CronTweetMlbStandings"
+      },
+      {
+        Sid      = "SchedulerSchedules"
         Effect   = "Allow"
-        Action   = ["events:Describe*", "events:List*", "events:PutRule", "events:DeleteRule", "events:PutTargets", "events:RemoveTargets", "events:EnableRule", "events:DisableRule", "events:TagResource", "events:UntagResource"]
-        Resource = module.twitter_mlb_bot.event_rule_arn
+        Action   = ["scheduler:CreateSchedule", "scheduler:GetSchedule", "scheduler:UpdateSchedule", "scheduler:DeleteSchedule"]
+        Resource = [for name in ["East", "Central", "West"] : "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/mlbbot-standings/${name}"]
+      },
+      {
+        Sid      = "SchedulerGroup"
+        Effect   = "Allow"
+        Action   = ["scheduler:CreateScheduleGroup", "scheduler:GetScheduleGroup", "scheduler:DeleteScheduleGroup", "scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource"]
+        Resource = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule-group/mlbbot-standings"
+      },
+      {
+        Sid      = "PassSchedulerExecutionRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = local.scheduler_role_arn
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" }
+        }
       },
       {
         Sid    = "Logs"
@@ -148,6 +172,7 @@ module "terraform_role" {
           local.terraform_role_arn,
           module.deploy_role.role_arn,
           module.twitter_mlb_bot.role_arn,
+          local.scheduler_role_arn,
           "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/${var.terraform_user_name}",
         ]
       },

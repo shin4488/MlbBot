@@ -1,22 +1,21 @@
+using System.Text.Json.Serialization;
 using Amazon.Lambda.Core;
 using TwitterMlbBot;
 
-// Lambdaランタイムが呼び出しイベント（EventBridgeのJSON）をハンドラの引数へ変換するためのシリアライザ指定
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
 namespace TwitterMlbBotExecution;
 
-/// <summary>
-/// Lambdaハンドラ。EventBridgeの定期実行から呼ばれ、本体（Program.Main）へ処理を委ねるだけの薄いラッパー
-/// </summary>
+/// <summary>Schedulerから受け取る投稿対象。</summary>
+public sealed record ScheduledEvent([property: JsonPropertyName("group")] string? Group);
+
+/// <summary>Schedulerのグループ指定を本体へ渡すLambdaハンドラ。</summary>
 public class Function
 {
-    /// <summary>
-    /// ハンドラ本体。イベント内容（スケジュールルールの情報）は処理に使わないため参照しない
-    /// （引数はLambdaの呼び出し規約に合わせたもの。呼び出しIDなどはランタイムがSTART/END行として自動でログ出力する）
-    /// </summary>
-    public async Task FunctionHandlerAsync(object input, ILambdaContext context)
+    public async Task FunctionHandlerAsync(ScheduledEvent? input, ILambdaContext context)
     {
-        await Program.Main(null);
+        // 許可するグループ名の規則は、通常の起動引数と共通にする。
+        // イベントの指定漏れを全地区ドライランとして扱わないよう、空値でもグループ指定を渡す。
+        await Program.Main(["--group", input?.Group ?? ""]);
     }
 }

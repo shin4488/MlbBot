@@ -1,3 +1,4 @@
+using TwitterMlbBot;
 using System.Globalization;
 using TwitterMlbBot.Composing;
 using TwitterMlbBot.Mlb;
@@ -53,7 +54,7 @@ public class TweetComposerTest
         var divisions = DivisionStanding.FromStandings(source);
         var results = new[]
         {
-            composer.ComposeTweets(source, testDate),
+            composer.ComposeTweets(source, testDate, PostingGroup.East),
             composer.Compose(divisions, testDate),
             composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), testDate),
         };
@@ -78,14 +79,14 @@ public class TweetComposerTest
     {
         var standings = new List<TeamStanding>
         {
-            Teams.Create("AL", "East", "Alpha", 90, 50),
-            Teams.Create("AL", "East", "Beta", 80, 60),
+            Teams.Create("AL", "West", "Alpha", 90, 50),
+            Teams.Create("AL", "West", "Beta", 80, 60),
             Teams.Create("NL", "West", "Gamma", 90, 50),
             Teams.Create("NL", "West", "Delta", 80, 60),
         };
 
         var tweets = new TweetComposer(new HashtagProvider())
-            .ComposeTweets(standings, new DateOnly(2026, month, day));
+            .ComposeTweets(standings, new DateOnly(2026, month, day), PostingGroup.West);
 
         Assert.Equal(count, tweets.Count);
         Assert.All(tweets.Take(2), tweet => Assert.DoesNotContain("Wild Card", tweet.Text));
@@ -98,7 +99,7 @@ public class TweetComposerTest
     public void ComposeTweets_成績が空なら投稿文面はない(int month)
     {
         var tweets = new TweetComposer(new HashtagProvider())
-            .ComposeTweets(Array.Empty<TeamStanding>(), new DateOnly(2026, month, 1));
+            .ComposeTweets(Array.Empty<TeamStanding>(), new DateOnly(2026, month, 1), PostingGroup.West);
 
         Assert.Empty(tweets);
     }

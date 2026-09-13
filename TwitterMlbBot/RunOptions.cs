@@ -1,44 +1,84 @@
-namespace TwitterMlbBot
+using System.Globalization;
+
+namespace TwitterMlbBot;
+
+/// <summary>代表タイムゾーンの前日を表示対象日とする実行オプション。</summary>
+internal record RunOptions(bool DryRun, int Year, DateOnly Date, PostingGroup Group)
 {
-    /// <summary>
-    /// 実行オプション（値オブジェクト）
-    /// </summary>
-    /// <param name="DryRun">ツイートせず文面をコンソール出力するのみとするか</param>
-    /// <param name="Year">順位データの対象年（西暦）</param>
-    /// <param name="Date">ツイート文面に表示する日付（直近の試合日 = アメリカの日付 = 日本時間の前日）</param>
-    internal record RunOptions(bool DryRun, int Year, DateOnly Date)
+    private const string InvalidArgumentsMessage = "起動引数が不正です。--dry-run、--group East|Central|West、対象年を確認してください。";
+
+    public static IReadOnlyList<RunOptions> Parse(string[]? args, string? dryRunEnvironmentValue, DateTime utcNow)
     {
-        private static readonly TimeZoneInfo jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-
-        /// <summary>
-        /// コマンドライン引数・環境変数・現在時刻から実行オプションを組み立てる純粋関数
-        /// </summary>
-        /// <param name="args">
-        /// コマンドライン引数（Lambda経由の実行ではnull）。
-        /// --dry-run でドライラン、数値の引数があればその年を対象とする
-        /// </param>
-        /// <param name="dryRunEnvironmentValue">環境変数DRY_RUNの値（"true"でドライラン。Lambdaでは通常未設定）</param>
-        /// <param name="utcNow">現在時刻（UTC）。年・日付は日本時間に換算して決める</param>
-        public static RunOptions Parse(string[]? args, string? dryRunEnvironmentValue, DateTime utcNow)
+        string[] arguments = args ?? [];
+        bool dryRun = string.Equals(dryRunEnvironmentValue, "true", StringComparison.OrdinalIgnoreCase);
+        PostingGroup? group = null;
+        int? year = null;
+        for (int index = 0; index < arguments.Length; index++)
         {
-            string[] arguments = args ?? Array.Empty<string>();
-
-            bool dryRun = arguments.Contains("--dry-run")
-                || string.Equals(dryRunEnvironmentValue, "true", StringComparison.OrdinalIgnoreCase);
-
-            DateOnly jstToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, jst));
-            // 表示する順位は前夜（アメリカ時間）の試合結果のため、日付も試合日＝日本時間の前日に合わせる
-            DateOnly gameDate = jstToday.AddDays(-1);
-
-            int year = arguments
-                .Select(argument => int.TryParse(argument, out int inputYear) ? inputYear : 0)
-                .FirstOrDefault(inputYear => inputYear > 0);
-            if (year == 0)
+            string argument = arguments[index];
+            if (argument == "--dry-run")
             {
-                year = jstToday.Year;
+                dryRun = true;
+                continue;
             }
 
-            return new RunOptions(dryRun, year, gameDate);
+            bool canReadGroupValue = argument == "--group" && group is null && index + 1 < arguments.Length;
+            if (canReadGroupValue)
+            {
+                group = ParseGroup(arguments[++index]);
+                continue;
+            }
+
+            if (year is not null)
+            {
+                throw new ArgumentException(InvalidArgumentsMessage);
+            }
+            year = ParseYear(argument);
         }
+
+        // 投稿先の指定漏れによる意図しない全地区投稿を防ぐため、通常投稿ではグループ指定を必須にする。
+        // 全地区の文面をまとめて確認できるよう、送信しないドライランでは未指定を許可する。
+        if (group is null && !dryRun)
+        {
+            throw new ArgumentException("投稿グループが未指定のため起動できません。--group East|Central|Westを指定してください。");
+        }
+
+        // 全地区の確認でも、日付は各グループの代表タイムゾーンで個別に算出する。
+        PostingGroup[] groups = group is { } selected ? [selected] : [PostingGroup.East, PostingGroup.Central, PostingGroup.West];
+        return groups.Select(selected => CreateForGroup(dryRun, year, utcNow, selected)).ToList().AsReadOnly();
+    }
+
+    private static PostingGroup ParseGroup(string argument) => argument switch
+    {
+        "East" => PostingGroup.East,
+        "Central" => PostingGroup.Central,
+        "West" => PostingGroup.West,
+        _ => throw new ArgumentException("投稿グループにはEast・Central・Westのいずれかを指定してください。"),
+    };
+
+    private static int ParseYear(string argument)
+    {
+        bool isValidYear = int.TryParse(argument, NumberStyles.None, CultureInfo.InvariantCulture, out int year)
+            && year is >= 1 and <= 9999;
+        if (!isValidYear)
+        {
+            // 入力値自体はログに残さず、指定ミスで投稿範囲が広がることを防ぐ。
+            throw new ArgumentException(InvalidArgumentsMessage);
+        }
+        return year;
+    }
+
+    private static RunOptions CreateForGroup(bool dryRun, int? year, DateTime utcNow, PostingGroup group)
+    {
+        string zoneId = group switch
+        {
+            PostingGroup.East => "America/New_York",
+            PostingGroup.Central => "America/Chicago",
+            _ => "America/Los_Angeles",
+        };
+        TimeZoneInfo timeZone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+        DateTime localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
+        DateOnly date = DateOnly.FromDateTime(localNow).AddDays(-1);
+        return new RunOptions(dryRun, year ?? date.Year, date, group);
     }
 }
