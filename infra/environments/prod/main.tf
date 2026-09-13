@@ -23,8 +23,9 @@ module "twitter_mlb_bot" {
     module.terraform_role.policy_id,
     aws_iam_user_policy.terraform_iam_bootstrap.id,
   ]
-  # PR①は無効で作成する。新コードの反映と投稿済み分を確認後、PR②でtrueにする。
-  schedules_enabled = false
+  # 投稿履歴による重複防止はないため、有効化前に最初の投稿対象日が投稿済みでないことを確認する。
+  # 3グループが同じ対象日から始まるよう、東部の実行時刻より十分前に有効化する。
+  schedules_enabled = true
   schedules = {
     East    = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/New_York", input = jsonencode({ group = "East" }) }
     Central = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/Chicago", input = jsonencode({ group = "Central" }) }
