@@ -20,7 +20,7 @@ flowchart LR
     click R "TwitterMlbBot/BotRunner.cs"
 ```
 
-- **実行スケジュール**: 東部（East）・中部（Central）・西部（West）の各代表現地時間 08:00 に起動し、該当地区の順位表を投稿します。
+- **実行スケジュール**: 東部（East）・中部（Central）・西部（West）の各代表現地時間 07:00 に起動し、該当地区の順位表を投稿します。
 - **詳細仕様**: ワイルドカードの投稿時期や対象日の算出ルールなどは [投稿仕様](docs/development.md#投稿対象と対象日の算出)、インフラ設定は [Terraform設定](infra/environments/prod/main.tf) を参照してください。
 
 ### 日程と順位の取得

@@ -45,7 +45,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    E["EventBridge Scheduler<br>各代表現地時刻 朝8時"] -->|専用ロールで対象Lambdaのみ起動| L["AWS Lambda<br>ボット実行"]
+    E["EventBridge Scheduler<br>各代表現地時刻 朝7時"] -->|専用ロールで対象Lambdaのみ起動| L["AWS Lambda<br>ボット実行"]
     R["実行ロール"] -->|専用ログへの書き込みのみ許可| L
     L -->|実行ログを出力| G["CloudWatch Logs<br>専用ロググループ"]
     L -->|関数実行エラー| A["CloudWatchアラーム"]
@@ -80,7 +80,7 @@ flowchart LR
 
 ## モジュールを別用途で利用する場合
 
-`scheduled_lambda` モジュールは、1つのLambda関数に対して任意の件数のEventBridge Schedulerを紐付ける汎用設計です。`schedules` マップのキーがスケジュール名となり、各要素に `schedule_expression`、`time_zone`（省略時UTC）、`input`（省略可能なJSON文字列）を渡します。MLB固有の地区名や朝8時といった条件は `environments/prod` 側で注入します。
+`scheduled_lambda` モジュールは、1つのLambda関数に対して任意の件数のEventBridge Schedulerを紐付ける汎用設計です。`schedules` マップのキーがスケジュール名となり、各要素に `schedule_expression`、`time_zone`（省略時UTC）、`input`（省略可能なJSON文字列）を渡します。MLB固有の地区名や朝7時といった条件は `environments/prod` 側で注入します。
 
 ```hcl
 schedules = {
