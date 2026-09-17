@@ -27,9 +27,9 @@ module "twitter_mlb_bot" {
   # 3グループが同じ対象日から始まるよう、東部の実行時刻より十分前に有効化する。
   schedules_enabled = true
   schedules = {
-    East    = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/New_York", input = jsonencode({ group = "East" }) }
-    Central = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/Chicago", input = jsonencode({ group = "Central" }) }
-    West    = { schedule_expression = "cron(0 8 * * ? *)", time_zone = "America/Los_Angeles", input = jsonencode({ group = "West" }) }
+    East    = { schedule_expression = "cron(0 7 * * ? *)", time_zone = "America/New_York", input = jsonencode({ group = "East" }) }
+    Central = { schedule_expression = "cron(0 7 * * ? *)", time_zone = "America/Chicago", input = jsonencode({ group = "Central" }) }
+    West    = { schedule_expression = "cron(0 7 * * ? *)", time_zone = "America/Los_Angeles", input = jsonencode({ group = "West" }) }
   }
 
   # ログの無限成長を防ぐ（運用調査には90日あれば十分）
