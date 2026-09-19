@@ -83,7 +83,61 @@ flowchart LR
 | [Composing/](../TwitterMlbBot/Composing/) | 投稿文面の組み立て、ハッシュタグ付与、文字数カウント |
 | [Twitter/](../TwitterMlbBot/Twitter/) | X API への投稿クライアント（実投稿用およびドライラン用） |
 
-データ取得および送信処理はインターフェースで抽象化されており、外部通信を伴わない単体テストが可能です。処理間の詳細な依存関係は [README.md](../README.md#プログラム構成) を参照してください。
+データ取得および送信処理はインターフェースで抽象化されており、外部通信を伴わない単体テストが可能です。
+
+### 起動から実行までの流れ
+
+```mermaid
+flowchart LR
+    F["Function<br>AWS Lambda エントリポイント<br>（EventBridge Schedulerから起動）"] --> P["Program.Main<br>DI・依存関係の初期化"]
+    P --> O["RunOptions<br>起動オプション解析"]
+    P --> R["BotRunner.RunAsync<br>実行制御<br>（日程確認 → 順位取得 → 文面生成 → 投稿）"]
+    click F "../TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
+    click P "../TwitterMlbBot/Program.cs"
+    click O "../TwitterMlbBot/RunOptions.cs"
+    click R "../TwitterMlbBot/BotRunner.cs"
+```
+
+### 日程と順位の取得
+
+データ取得処理はインターフェースを介して抽象化されており、テスト時にはモックへの差し替えが可能です。
+
+```mermaid
+flowchart LR
+    ISC["ISeasonCalendarProvider<br>シーズン日程取得インターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 API (statsapi.mlb.com)<br>認証不要・対象年日程取得"]
+    MSC -->|取得結果| SC["SeasonCalendar<br>日程データモデル<br>シーズン終了判定"]
+    ISP["IStandingsProvider<br>順位取得インターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io APIクライアント<br>擬似チーム除外・全球団構成検証"]
+    MAC -->|取得結果| TS["TeamStanding<br>成績データモデル<br>勝率・ゲーム差計算"]
+    TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
+    click ISC "../TwitterMlbBot/Mlb/ISeasonCalendarProvider.cs"
+    click MSC "../TwitterMlbBot/Mlb/MlbStatsApiClient.cs"
+    click SC "../TwitterMlbBot/Mlb/SeasonCalendar.cs"
+    click ISP "../TwitterMlbBot/Mlb/IStandingsProvider.cs"
+    click MAC "../TwitterMlbBot/Mlb/MlbApiClient.cs"
+    click TS "../TwitterMlbBot/Mlb/TeamStanding.cs"
+    click DS "../TwitterMlbBot/Mlb/"
+```
+
+### 文面生成と投稿
+
+文面生成ロジックは外部通信や環境変数に依存しません。送信インターフェース（`ITweetSender`）の実装を切り替えることで、Xへの実投稿とローカルでのドライラン（コンソール出力）を同一ロジックで実行します。
+
+```mermaid
+flowchart LR
+    C["TweetComposer<br>投稿種別・時期判定・文面生成"] -->|タグ取得| H["HashtagProvider<br>公式ハッシュタグ対応表"]
+    C -->|文面生成| T["TweetContent<br>投稿モデル<br>文字数カウント・超過判定"]
+    T --> I["ITweetSender<br>送信インターフェース"]
+    I -->|実投稿| X["TwitterApiSender<br>X API v2 送信クライアント"]
+    X -->|署名| A["OAuth1<br>OAuth 1.0a 認証"]
+    I -->|ドライラン| D["DryRunTweetSender<br>コンソール出力"]
+    click C "../TwitterMlbBot/Composing/TweetComposer.cs"
+    click H "../TwitterMlbBot/Composing/HashtagProvider.cs"
+    click T "../TwitterMlbBot/Composing/TweetContent.cs"
+    click I "../TwitterMlbBot/Twitter/ITweetSender.cs"
+    click X "../TwitterMlbBot/Twitter/TwitterApiSender.cs"
+    click A "../TwitterMlbBot/Authorization/OAuth1.cs"
+    click D "../TwitterMlbBot/Twitter/DryRunTweetSender.cs"
+```
 
 ## 正常系・例外系の実行シーケンス
 
