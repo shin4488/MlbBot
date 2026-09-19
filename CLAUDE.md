@@ -1,6 +1,6 @@
 # 開発ガイド（Claude Code / Codex / Gemini共通）
 
-MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Program.cs](TwitterMlbBot/Program.cs)、実行判断は [BotRunner.cs](TwitterMlbBot/BotRunner.cs)、Lambdaの入口・テストは `TwitterMlbBotExecution/`。構成図は [README](README.md#プログラムの構成)。
+MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Program.cs](TwitterMlbBot/Program.cs)、実行判断は [BotRunner.cs](TwitterMlbBot/BotRunner.cs)、Lambdaの入口・テストは `TwitterMlbBotExecution/`。構成図は [README](README.md#概要とアーキテクチャ)。
 
 ## 必ず守ること
 
@@ -18,7 +18,7 @@ MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Prog
 | 投稿内容・文面 | [ツイート改善案](docs/tweet-content-ideas.md)の関連節 |
 | 責務・投稿条件・失敗時の動作 | [開発上の判断と投稿仕様](docs/development.md)の関連節 |
 | インフラ・権限・デプロイ・運用 | [infra/README](infra/README.md)の関連節。検証処理は `.github/actions/verify-dotnet/` |
-| 環境構築・認証・エージェント導入 | [README](README.md#手元のpcで実行する)、[エージェント設定](README.md#エージェントの設定) |
+| 環境構築・認証・エージェント導入 | [README](README.md#ローカルでの実行ドライラン)、`.claude/settings.json`・`.codex/hooks.json` |
 
 ## ビルド・検証
 
@@ -54,10 +54,11 @@ dotnet run --project TwitterMlbBot -- --dry-run
 - 共通skillはプラグイン側で管理する。`.claude/hooks/post-edit.sh` による `.tf` の整形・初期化済みprodの検証を維持し、適用・破棄は人間が行う。
 - 実投稿防止の `guard-real-run.sh` は `.claude/settings.json` と `.codex/hooks.json` の `PreToolUse` に残す。`.codex/hooks` → `.claude/hooks` の相対リンクを維持する。Claudeの権限設定はCodexに引き継がれない。
 
-## 調査と指示の保守
+## 作業の進め方
 
-- `AGENTS.md` は `CLAUDE.md` への相対リンク。本文は一度読み、実体を編集する。
-- `rg` は対象ディレクトリから名前・見出し・シンボルを探す。通常は `-g` で依存・成果物・ログ・ロックファイル・生成コードを除外し、依存・生成・型・障害の調査では直接読む。見つからなければ範囲・除外を見直す。
-- 必須検証を行い、要点・失敗箇所を報告する。同じ差分・依存・設定・実行条件の結果は再利用する。
-- ここは恒久規約・必須条件・主要コマンド・参照先に限る。進捗はチャット・既存Issue/PR、機能・構成・依存・設定等の現在値は元の定義へ。規約・条件・参照先の変更や継続して必要な判断基準の追加時に更新する。
-- スキルは説明から選び、該当 `SKILL.md` に従う。一覧・手順は転記せず、このガイドの必須適用条件は守る。
+- `AGENTS.md` はこのファイルへの相対リンク。共通の本文は一度だけ読み、`CLAUDE.md` を編集する。
+- 対象のファイル・見出し・シンボルから調べ、必要な場合だけ範囲を広げる。資料やskillsは作業に該当するものを読む。
+- 不明点は質問して解消してから、その判断に依存する作業に進む。すでに決まっている事項は再確認しない。
+- 文書の言語を保ち、日本語は日本人に、英語は英語圏の読者に自然に伝わる表現にする。
+- 必須検証は適用条件に従って実行し、同じ差分・依存・設定・実行条件で得た結果は再利用する。問題を修正し、結果と未確認の範囲を簡潔に報告する。
+- このガイドには継続して必要な規約と参照先を残す。進捗や設定値、他の資料・skillsの手順は複製しない。
