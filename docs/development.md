@@ -237,58 +237,52 @@ sequenceDiagram
     Note over P,B: 【前フェーズから】グループごとの実行制御
     P->>B: RunAsync(年・表示日・グループ)
 
-    rect rgb(245, 247, 250)
-        Note over B,C: ① シーズン日程の確認と判定
-        B->>C: GetSeasonCalendarAsync(年)
-        C->>API: Stats APIへ日程を要求
-        API-->>C: HTTP応答、または通信例外
-        C->>C: 成功応答ならJSON解析・対象シーズン・終了日を検証
-        Note over C: HTTP不成功・JSON不正・終了日欠落等はMlbApiException
-        break 日程APIの不具合・通常のキャンセル
-            C-->>B: 想定したAPI・通信失敗以外の例外
-            B-->>P: 元の例外をそのまま伝播
-        end
-        alt 日程取得・検証が成功
-            C-->>B: SeasonCalendar
-            B->>B: 表示日がシーズン終了日を過ぎていれば「スキップ判定」<br/>終了日以前なら「続行判定」
-        else 日程API・通信の失敗（HTTPタイムアウト含む）
-            C-->>B: 例外
-            Note over B: MlbApiException・通信障害・HTTPタイムアウトだけを捕捉
-            alt 表示日が11〜2月（シーズン外見込み）
-                B->>B: 元の例外を警告ログに残し「スキップ判定」
-            else 表示日が3〜10月（シーズン中見込み）
-                B->>B: 元の例外をエラーログに残し「続行判定」
-            end
+    Note over B,C: ① シーズン日程の確認と判定
+    B->>C: GetSeasonCalendarAsync(年)
+    C->>API: Stats APIへ日程を要求
+    API-->>C: HTTP応答、または通信例外
+    C->>C: 成功応答ならJSON解析・対象シーズン・終了日を検証
+    Note over C: HTTP不成功・JSON不正・終了日欠落等はMlbApiException
+    break 日程APIの不具合・通常のキャンセル
+        C-->>B: 想定したAPI・通信失敗以外の例外
+        B-->>P: 元の例外をそのまま伝播
+    end
+    alt 日程取得・検証が成功
+        C-->>B: SeasonCalendar
+        B->>B: 表示日がシーズン終了日を過ぎていれば「スキップ判定」<br/>終了日以前なら「続行判定」
+    else 日程API・通信の失敗（HTTPタイムアウト含む）
+        C-->>B: 例外
+        Note over B: MlbApiException・通信障害・HTTPタイムアウトだけを捕捉
+        alt 表示日が11〜2月（シーズン外見込み）
+            B->>B: 元の例外を警告ログに残し「スキップ判定」
+        else 表示日が3〜10月（シーズン中見込み）
+            B->>B: 元の例外をエラーログに残し「続行判定」
         end
     end
 
     alt スキップ判定
         B-->>P: 投稿せずグループ処理を正常終了
     else 続行判定
-        rect rgb(245, 247, 250)
-            Note over B,S: ② 順位データの取得と球団検証
-            B->>S: GetStandingsAsync(年)
-            S->>API: sportsdata.ioへ順位を要求（キーはヘッダー）
-            API-->>S: HTTP応答、または通信例外
-            S->>S: 成功応答ならParseStandings（年・応答）
-            Note over S: JSON解析 → null要素拒否 → 擬似チーム除外<br/>勝敗確認 → TeamStanding生成 → 球団重複・30球団構成検証
-            break 順位の取得・解析・検証が失敗
-                Note over S: HTTP不成功はMlbApiException<br/>JSON不正・構成不正はInvalidOperationException
-                S-->>B: 例外（取得側で包み直さず伝播）
-                B-->>P: 例外をそのまま伝播
-            end
-            S-->>B: 読み取り専用のチーム成績一覧
+        Note over B,S: ② 順位データの取得と球団検証
+        B->>S: GetStandingsAsync(年)
+        S->>API: sportsdata.ioへ順位を要求（キーはヘッダー）
+        API-->>S: HTTP応答、または通信例外
+        S->>S: 成功応答ならParseStandings（年・応答）
+        Note over S: JSON解析 → null要素拒否 → 擬似チーム除外<br/>勝敗確認 → TeamStanding生成 → 球団重複・30球団構成検証
+        break 順位の取得・解析・検証が失敗
+            Note over S: HTTP不成功はMlbApiException<br/>JSON不正・構成不正はInvalidOperationException
+            S-->>B: 例外（取得側で包み直さず伝播）
+            B-->>P: 例外をそのまま伝播
         end
+        S-->>B: 読み取り専用のチーム成績一覧
 
-        rect rgb(245, 247, 250)
-            Note over B,T: ③ 文面生成
-            B->>T: ComposeTweets(全成績・表示日・グループ)
-            T->>T: 地区別に順位・ゲーム差を算出し、対象地区の文面を生成<br/>公式ハッシュタグを付与
-            opt Westグループ かつ 表示日が8月以降
-                T->>T: ワイルドカード順位の文面を追加
-            end
-            T-->>B: 読み取り専用の投稿文面一覧 (tweets)
+        Note over B,T: ③ 文面生成
+        B->>T: ComposeTweets(全成績・表示日・グループ)
+        T->>T: 地区別に順位・ゲーム差を算出し、対象地区の文面を生成<br/>公式ハッシュタグを付与
+        opt Westグループ かつ 表示日が8月以降
+            T->>T: ワイルドカード順位の文面を追加
         end
+        T-->>B: 読み取り専用の投稿文面一覧 (tweets)
 
         alt 文面が0件（空順位）
             B->>B: 投稿しない旨を通常ログに記録
