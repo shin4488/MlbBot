@@ -176,6 +176,11 @@ flowchart LR
 ## 正常系・例外系の実行シーケンス
 
 外部APIへの通信には共通の [ApiHttpClientFactory](../TwitterMlbBot/ApiHttpClientFactory.cs) を使い、転送禁止・タイムアウト・応答サイズ上限を適用します。
+処理の流れとエラーハンドリングの全体像を、役割に応じた3つのフェーズに分けて記載します。
+
+### 1. 起動・初期化シーケンス
+
+起動引数・投稿グループの検証、必須環境変数の確認、および依存関係の組み立て（DI）を行います。
 
 ```mermaid
 sequenceDiagram
@@ -183,113 +188,164 @@ sequenceDiagram
     actor Entry as 起動元（Lambda / CLI）
     participant P as Program / RunOptions
     participant B as BotRunner
+
+    Note over Entry,P: Lambdaはイベントからgroupを渡し、CLIは起動引数を渡す
+    Entry->>P: Main(args)
+    P->>P: 引数・投稿グループ・対象年を検証<br/>各グループの現地前日を表示日に決定
+    break 引数不正・通常実行のグループ未指定
+        P-->>Entry: ArgumentException で異常終了
+    end
+
+    P->>P: 必須環境変数を確認し、依存先を組み立てる
+    Note over P: 通常実行: MLB APIキー + X API認証情報を要求<br/>ドライラン: MLB APIキーのみ要求（DryRunTweetSenderを選択）
+    break 必須環境変数が未設定・空文字
+        P-->>Entry: InvalidOperationException で異常終了
+    end
+
+    loop 実行グループごと（通常は1グループ、ドライラン未指定時は3グループ順次）
+        P->>B: RunAsync(年・表示日・グループ)
+        Note over B: 【次フェーズ: 2. 日程確認・順位取得・文面生成へ】
+        B-->>P: グループ処理の完了（または例外伝播）
+    end
+    P-->>Entry: 正常終了
+```
+
+### 2. 日程確認・順位取得・文面生成シーケンス
+
+`BotRunner` がシーズン日程を確認して投稿可否を判定し、順位データの取得・検証、および文面生成を行います。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant B as BotRunner
     participant C as MlbStatsApiClient
     participant S as MlbApiClient
     participant T as TweetComposer
-    participant X as 投稿先実装
     participant API as 外部API
 
-    Note over Entry,P: Lambdaはイベントを読み取り、Functionからgroupを渡す<br/>CLIは起動引数を渡す。イベントJSONの型不正はハンドラ実行前に失敗
-    Entry->>P: Main（引数）
-    P->>P: 引数・投稿グループ・対象年を検証<br/>グループごとの現地前日を表示日にする
-    break 引数不正・通常実行のグループ未指定
-        P-->>Entry: ArgumentExceptionで異常終了
-    end
-    P->>P: 必須環境変数を確認し、依存先を組み立てる
-    Note over P,X: 通常実行はMLB・Xの認証情報を要求<br/>ドライランはMLBのみ要求し、DryRunTweetSenderを選ぶ
-    break 必須環境変数が未設定・空文字
-        P-->>Entry: InvalidOperationExceptionで異常終了
-    end
+    Note over P,B: 【前フェーズから】グループごとの実行制御
+    P->>B: RunAsync(年・表示日・グループ)
 
-    loop 実行グループごと（通常は1つ、グループ未指定のドライランは3つ）
-        P->>B: RunAsync（年・表示日・グループ）
-        B->>C: GetSeasonCalendarAsync（年）
+    rect rgb(245, 247, 250)
+        Note over B,C: ① シーズン日程の確認と判定
+        B->>C: GetSeasonCalendarAsync(年)
         C->>API: Stats APIへ日程を要求
         API-->>C: HTTP応答、または通信例外
         C->>C: 成功応答ならJSON解析・対象シーズン・終了日を検証
-        Note over C: HTTP不成功・JSON不正・応答null・対象シーズン0件や複数件・終了日欠落や年不一致はMlbApiException<br/>JSON解析では年・解析位置を残し、元の例外は保持しない。通信例外はそのまま伝播
-        break 日程取得の不具合・通常のキャンセル
-            C-->>B: 想定したAPI・通信の失敗以外の例外
+        Note over C: HTTP不成功・JSON不正・終了日欠落等はMlbApiException
+        break 日程APIの不具合・通常のキャンセル
+            C-->>B: 想定したAPI・通信失敗以外の例外
             B-->>P: 元の例外をそのまま伝播
-            P-->>Entry: 季節によらず異常終了
         end
         alt 日程取得・検証が成功
             C-->>B: SeasonCalendar
-            B->>B: 表示日がシーズン終了日を過ぎていればスキップ判定<br/>終了日以前なら続行判定
-        else 日程API・通信の失敗（HTTPタイムアウトを含む）
+            B->>B: 表示日がシーズン終了日を過ぎていれば「スキップ判定」<br/>終了日以前なら「続行判定」
+        else 日程API・通信の失敗（HTTPタイムアウト含む）
             C-->>B: 例外
             Note over B: MlbApiException・通信障害・HTTPタイムアウトだけを捕捉
-            alt 表示日が11〜2月
-                B->>B: 元の例外を警告ログに残し、スキップ判定
-            else 表示日が3〜10月
-                B->>B: 元の例外をエラーログに残し、続行判定
-            end
-        end
-
-        alt スキップ判定
-            B-->>P: 投稿せずグループ処理を正常終了
-        else 続行判定
-            B->>S: GetStandingsAsync（年）
-            S->>API: sportsdata.ioへ順位を要求（キーはヘッダー）
-            API-->>S: HTTP応答、または通信例外
-            S->>S: 成功応答ならParseStandings（年・応答）
-            Note over S: JSON解析 → null要素の拒否 → All-Star擬似チームの除外<br/>勝敗の欠落確認 → TeamStanding生成 → 球団名重複・地区構成の検証<br/>空配列は正常。球団名の実在・正しい所属との照合は行わない
-            break 順位の取得・解析・検証が失敗
-                Note over S: HTTP不成功はMlbApiException<br/>JSON不正・欠落・構成不正はInvalidOperationException<br/>TeamStandingの名前・所属の空値、負の勝敗はArgumentException<br/>JSON解析では年・解析位置を残し、元の例外は保持しない
-                S-->>B: 例外（通信例外を含め、取得側で包み直さない）
-                B-->>P: 例外を伝播
-                P-->>Entry: 投稿せず異常終了（後続グループも実行しない）
-            end
-            S-->>B: 読み取り専用のチーム成績一覧
-            B->>T: ComposeTweets（全成績・表示日・グループ）
-            T->>T: 地区別に順位・ゲーム差を算出し、対象地区の文面を生成<br/>ハッシュタグを付与
-            opt Westかつ表示日が8月以降
-                T->>T: 全地区から地区首位を除いてWC順位を算出<br/>AL・NLのWC文面を地区文面の後に追加
-            end
-            T-->>B: 読み取り専用の投稿文面一覧
-            alt 文面が0件（空順位）
-                B->>B: 投稿しない旨を通常ログに記録
-                B-->>P: グループ処理を正常終了
-            else 文面が1件以上
-                loop 文面を順に処理
-                    opt Xの数え方（英字は1、日本語・絵文字は2）で文字数上限を超える可能性
-                        B->>B: 警告ログを記録（送信は試みる）
-                    end
-                    B->>X: TrySendAsyncからSendAsyncを呼ぶ
-                    alt ドライラン
-                        X->>X: 文面と文字数を出力（Xへ通信しない）
-                    else 通常投稿
-                        X->>X: 2件目以降の送信前に間隔を空ける<br/>OAuth署名・JSON本文を生成
-                        X->>API: X APIへ投稿
-                        API-->>X: HTTP応答、または通信例外
-                    end
-                    break 送信処理の不具合・通常のキャンセル（署名生成・出力など）
-                        X-->>B: 想定した通信障害以外の例外
-                        B-->>P: 元の例外をそのまま伝播
-                        P-->>Entry: 異常終了（残りの投稿・グループは実行しない）
-                    end
-                    alt 通信障害・HTTPタイムアウト
-                        X-->>B: 例外
-                        B->>B: 元の例外をエラーログに残し、1件失敗とする
-                    else XがHTTP不成功応答を返す
-                        X->>X: 応答コードを警告ログに記録（本文は残さない）
-                        X-->>B: false（1件失敗）
-                    else XがHTTP成功応答、またはドライラン出力成功
-                        X-->>B: true
-                        B->>B: 成功件数を加算
-                    end
-                    Note over B,API: 失敗した文面は再送せず、残りの文面へ進む<br/>応答を受け取れなくても投稿済みの可能性がある
-                end
-                B->>B: 成功件数と総件数を通常ログに記録
-                break 成功が0件
-                    B-->>P: AllTweetsFailedException（個別原因は直前のログ）
-                    P-->>Entry: 異常終了（後続グループも実行しない）
-                end
-                B-->>P: 1件以上成功ならグループ処理を正常終了
+            alt 表示日が11〜2月（シーズン外見込み）
+                B->>B: 元の例外を警告ログに残し「スキップ判定」
+            else 表示日が3〜10月（シーズン中見込み）
+                B->>B: 元の例外をエラーログに残し「続行判定」
             end
         end
     end
-    P-->>Entry: 正常終了
+
+    alt スキップ判定
+        B-->>P: 投稿せずグループ処理を正常終了
+    else 続行判定
+        rect rgb(245, 247, 250)
+            Note over B,S: ② 順位データの取得と球団検証
+            B->>S: GetStandingsAsync(年)
+            S->>API: sportsdata.ioへ順位を要求（キーはヘッダー）
+            API-->>S: HTTP応答、または通信例外
+            S->>S: 成功応答ならParseStandings（年・応答）
+            Note over S: JSON解析 → null要素拒否 → 擬似チーム除外<br/>勝敗確認 → TeamStanding生成 → 球団重複・30球団構成検証
+            break 順位の取得・解析・検証が失敗
+                Note over S: HTTP不成功はMlbApiException<br/>JSON不正・構成不正はInvalidOperationException
+                S-->>B: 例外（取得側で包み直さず伝播）
+                B-->>P: 例外をそのまま伝播
+            end
+            S-->>B: 読み取り専用のチーム成績一覧
+        end
+
+        rect rgb(245, 247, 250)
+            Note over B,T: ③ 文面生成
+            B->>T: ComposeTweets(全成績・表示日・グループ)
+            T->>T: 地区別に順位・ゲーム差を算出し、対象地区の文面を生成<br/>公式ハッシュタグを付与
+            opt Westグループ かつ 表示日が8月以降
+                T->>T: ワイルドカード順位の文面を追加
+            end
+            T-->>B: 読み取り専用の投稿文面一覧 (tweets)
+        end
+
+        alt 文面が0件（空順位）
+            B->>B: 投稿しない旨を通常ログに記録
+            B-->>P: グループ処理を正常終了
+        else 文面が1件以上
+            Note over B: 【次フェーズ: 3. ツイート送信・エラーハンドリングへ】
+            B-->>P: 送信結果（1件以上成功で正常終了 / 全件失敗でAllTweetsFailedException）
+        end
+    end
+```
+
+### 3. ツイート送信・エラーハンドリングシーケンス
+
+生成された文面一覧を1件ずつ順に送信します。二重投稿を防止するため自動再送は行わず、レート制限待機やエラー時のフォールスルー制御を行います。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant B as BotRunner
+    participant X as ITweetSender (TwitterApiSender / DryRun)
+    participant API as X API (Twitter)
+
+    Note over B: 【前フェーズから】文面一覧 (tweets) を受け取り送信開始
+
+    loop 文面を順に処理
+        opt Xの数え方（英字は1、日本語・絵文字は2）で文字数上限を超える可能性
+            B->>B: 警告ログを記録（送信は試みる）
+        end
+        B->>X: TrySendAsyncからSendAsyncを呼ぶ
+        alt ドライラン (DryRunTweetSender)
+            X->>X: 文面と文字数をコンソール出力（外部通信なし）
+            X-->>B: 送信成功 (true)
+            B->>B: 成功件数を加算
+        else 通常投稿 (TwitterApiSender)
+            opt 2件目以降の送信
+                X->>X: 連続リクエストによるレート制限回避のため待機
+            end
+            X->>X: OAuth 1.0a 署名・JSON本文を生成
+            X->>API: POST /2/tweets
+            API-->>X: HTTP応答、または通信例外
+
+            break 送信処理の不具合・通常のキャンセル（署名生成・出力など）
+                X-->>B: 想定した通信障害以外の例外
+                B-->>P: 元の例外をそのまま伝播
+            end
+
+            alt 通信障害・HTTPタイムアウト
+                X-->>B: 例外
+                B->>B: 元の例外をエラーログに残し、1件失敗とする
+            else X APIがHTTP不成功応答を返却
+                X->>X: 応答コードを警告ログに記録（本文は残さない）
+                X-->>B: false（1件失敗）
+            else X APIがHTTP成功応答 (201)
+                X-->>B: true
+                B->>B: 成功件数を加算
+            end
+        end
+        Note over B,API: 失敗した文面は再送せず、残りの文面へ進む（投稿完了済みの可能性があるため）
+    end
+
+    B->>B: 成功件数と総件数を通常ログに記録
+    alt 成功が0件（全ツイート失敗）
+        B-->>P: AllTweetsFailedException をスローして異常終了
+    else 1件以上成功
+        B-->>P: グループ処理を正常終了
+    end
 ```
 
 図中の捕捉箇所以外で発生した例外（タイムゾーンの取得・文面生成など）は、`Program`・`Function` でも捕捉せず異常終了します。日程取得と1件の送信では回復対象の例外だけを捕捉します。HTTPタイムアウトは内部例外が `TimeoutException` の `OperationCanceledException` で判別し、通常のキャンセルは伝播させます。Lambdaでは異常終了がエラーメトリクス、エラーログがログ監視の対象となり、通知は [運用設定](../infra/README.md) に従います。
