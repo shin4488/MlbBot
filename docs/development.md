@@ -89,26 +89,45 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    F["Function<br>AWS Lambda エントリポイント<br>（EventBridge Schedulerから起動）"] --> P["Program.Main<br>DI・依存関係の初期化"]
-    P --> O["RunOptions<br>起動オプション解析"]
-    P --> R["BotRunner.RunAsync<br>実行制御<br>（日程確認 → 順位取得 → 文面生成 → 投稿）"]
+    F["Function<br>AWS Lambda エントリポイント<br>（EventBridge Schedulerから起動）"] --> P["Program.Main<br>起動オプション解析 & DI初期化"]
+    P --> R["BotRunner.RunAsync<br>全体の実行制御"]
+    R -->|① 日程確認| Cal["ISeasonCalendarProvider<br>（MLB公式 Stats API）"]
+    R -->|② 順位取得| Std["IStandingsProvider<br>（sportsdata.io API）"]
+    R -->|③ 文面生成| Comp["TweetComposer<br>（ハッシュタグ・文字数計算）"]
+    R -->|④ ツイート送信| Send["ITweetSender<br>（X API / ドライラン）"]
+
     click F "../TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
     click P "../TwitterMlbBot/Program.cs"
-    click O "../TwitterMlbBot/RunOptions.cs"
     click R "../TwitterMlbBot/BotRunner.cs"
 ```
 
 ### 日程と順位の取得
 
-データ取得処理はインターフェースを介して抽象化されており、テスト時にはモックへの差し替えが可能です。
+`BotRunner` から各プロバイダーを呼び出し、外部APIから取得したデータをモデルへ変換・検証します。各処理はインターフェースを介して抽象化されており、単体テスト時のモック差し替えが可能です。
 
 ```mermaid
 flowchart LR
-    ISC["ISeasonCalendarProvider<br>シーズン日程取得インターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 API (statsapi.mlb.com)<br>認証不要・対象年日程取得"]
-    MSC -->|取得結果| SC["SeasonCalendar<br>日程データモデル<br>シーズン終了判定"]
-    ISP["IStandingsProvider<br>順位取得インターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io APIクライアント<br>擬似チーム除外・全球団構成検証"]
-    MAC -->|取得結果| TS["TeamStanding<br>成績データモデル<br>勝率・ゲーム差計算"]
-    TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
+    subgraph Caller["実行制御"]
+        BR1["BotRunner<br>(RunAsync)"]
+    end
+
+    subgraph Calendar["日程取得 & 終了判定"]
+        ISC["ISeasonCalendarProvider<br>日程取得インターフェース"] -->|実装| MSC["MlbStatsApiClient<br>MLB公式 API (statsapi.mlb.com)"]
+        MSC -->|取得結果| SC["SeasonCalendar<br>日程データモデル (終了判定)"]
+    end
+
+    subgraph Standings["順位取得 & 計算"]
+        ISP["IStandingsProvider<br>順位取得インターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io APIクライアント"]
+        MAC -->|取得結果| TS["TeamStanding<br>成績モデル (勝率・ゲーム差計算)"]
+        TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
+    end
+
+    BR1 -->|① 日程確認| ISC
+    SC -.->|判定結果| BR1
+    BR1 -->|② 順位取得| ISP
+    DS -.->|順位データ一覧| BR1
+
+    click BR1 "../TwitterMlbBot/BotRunner.cs"
     click ISC "../TwitterMlbBot/Mlb/ISeasonCalendarProvider.cs"
     click MSC "../TwitterMlbBot/Mlb/MlbStatsApiClient.cs"
     click SC "../TwitterMlbBot/Mlb/SeasonCalendar.cs"
@@ -120,16 +139,31 @@ flowchart LR
 
 ### 文面生成と投稿
 
-文面生成ロジックは外部通信や環境変数に依存しません。送信インターフェース（`ITweetSender`）の実装を切り替えることで、Xへの実投稿とローカルでのドライラン（コンソール出力）を同一ロジックで実行します。
+`BotRunner` が取得した順位データを `TweetComposer` に渡し、文面を組み立てた後に `ITweetSender` へ渡して送信します。送信インターフェースの実装を切り替えることで、Xへの実投稿とローカルでのドライラン（コンソール出力）を同一ロジックで実行します。
 
 ```mermaid
 flowchart LR
-    C["TweetComposer<br>投稿種別・時期判定・文面生成"] -->|タグ取得| H["HashtagProvider<br>公式ハッシュタグ対応表"]
-    C -->|文面生成| T["TweetContent<br>投稿モデル<br>文字数カウント・超過判定"]
-    T --> I["ITweetSender<br>送信インターフェース"]
-    I -->|実投稿| X["TwitterApiSender<br>X API v2 送信クライアント"]
-    X -->|署名| A["OAuth1<br>OAuth 1.0a 認証"]
-    I -->|ドライラン| D["DryRunTweetSender<br>コンソール出力"]
+    subgraph Caller["実行制御"]
+        BR2["BotRunner<br>(RunAsync)"]
+    end
+
+    subgraph Composer["文面生成"]
+        C["TweetComposer<br>投稿種別・時期判定・文面生成"] -->|タグ取得| H["HashtagProvider<br>公式ハッシュタグ対応表"]
+        C -->|文面生成| T["TweetContent<br>投稿モデル (文字数超過判定)"]
+    end
+
+    subgraph Sender["送信処理"]
+        I["ITweetSender<br>送信インターフェース"]
+        I -->|実投稿| X["TwitterApiSender<br>X API v2 送信クライアント"]
+        X -->|OAuth 1.0a署名| A["OAuth1"]
+        I -->|ドライラン| D["DryRunTweetSender<br>コンソール出力"]
+    end
+
+    BR2 -->|③ 順位データを渡して文面生成| C
+    T -.->|生成されたツイート一覧| BR2
+    BR2 -->|④ ツイート送信| I
+
+    click BR2 "../TwitterMlbBot/BotRunner.cs"
     click C "../TwitterMlbBot/Composing/TweetComposer.cs"
     click H "../TwitterMlbBot/Composing/HashtagProvider.cs"
     click T "../TwitterMlbBot/Composing/TweetContent.cs"
