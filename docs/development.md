@@ -96,6 +96,8 @@ flowchart LR
     R -->|③ 文面生成| Comp["TweetComposer<br>（ハッシュタグ・文字数計算）"]
     R -->|④ ツイート送信| Send["ITweetSender<br>（X API / ドライラン）"]
 
+    Cal ~~~ Std ~~~ Comp ~~~ Send
+
     click F "../TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
     click P "../TwitterMlbBot/Program.cs"
     click R "../TwitterMlbBot/BotRunner.cs"
@@ -121,6 +123,10 @@ flowchart LR
         MAC -->|取得結果| TS["TeamStanding<br>成績モデル (勝率・ゲーム差計算)"]
         TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
     end
+
+    ISC ~~~ ISP
+    MSC ~~~ MAC
+    SC ~~~ TS
 
     BR1 -->|① 日程確認| ISC
     SC -.->|判定結果| BR1
@@ -158,6 +164,10 @@ flowchart LR
         X -->|OAuth 1.0a署名| A["OAuth1"]
         I -->|ドライラン| D["DryRunTweetSender<br>コンソール出力"]
     end
+
+    C ~~~ I
+    H ~~~ X
+    T ~~~ D
 
     BR2 -->|③ 順位データを渡して文面生成| C
     T -.->|生成されたツイート一覧| BR2
