@@ -12,15 +12,6 @@ MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Prog
 - **`infra/` のファイルは、ユーザーが内容を確認して明示的にコミットを指示した場合だけコミットする。**
 - Actionsの `uses:` を変更するときは `pin-github-actions` skillに従い、フルcommit SHAとバージョンコメントで固定する。
 
-## 変更内容に応じて読む資料
-
-| 変更する内容 | 読む箇所 |
-| --- | --- |
-| 投稿内容・文面 | [ツイート改善案](docs/tweet-content-ideas.md)の関連節 |
-| 責務・投稿条件・失敗時の動作 | [開発上の判断と投稿仕様](docs/development.md)の関連節 |
-| インフラ・権限・デプロイ・運用 | [infra/README](infra/README.md)の関連節。検証処理は `.github/actions/verify-dotnet/` |
-| 環境構築・認証・エージェント導入 | [README](README.md#ローカルでの実行ドライラン)、`.claude/settings.json`・`.codex/hooks.json` |
-
 ## ビルド・検証
 
 コード・依存・ビルド設定の変更時は次を実行する。文書・指示だけの変更は内容・リンクを確認する。
