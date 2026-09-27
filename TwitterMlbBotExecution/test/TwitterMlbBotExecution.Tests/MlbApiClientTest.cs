@@ -69,6 +69,27 @@ public class MlbApiClientTest
     }
 
     [Fact]
+    public void ParseStandings_地区優勝とワイルドカード進出の確定フラグを取り込む()
+    {
+        JsonArray response = StandingsFixture.CreateResponse();
+        response[0]!["ClinchedDivision"] = true;
+        response[0]!["ClinchedWildCard"] = false;
+        response[1]!["ClinchedDivision"] = false;
+        response[1]!["ClinchedWildCard"] = true;
+        response[2]!.AsObject().Remove("ClinchedDivision");
+        response[2]!.AsObject().Remove("ClinchedWildCard");
+
+        IReadOnlyList<TeamStanding> teams = MlbApiClient.ParseStandings(2026, response.ToJsonString());
+
+        Assert.True(teams[0].ClinchedDivision);
+        Assert.False(teams[0].ClinchedWildCard);
+        Assert.False(teams[1].ClinchedDivision);
+        Assert.True(teams[1].ClinchedWildCard);
+        Assert.False(teams[2].ClinchedDivision);
+        Assert.False(teams[2].ClinchedWildCard);
+    }
+
+    [Fact]
     public void ParseStandings_AllStar擬似チームは含まれない()
     {
         // レスポンスにはリーグ名と地区名が同一の擬似チーム（"AL"/"AL"）が混ざる

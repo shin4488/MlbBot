@@ -12,6 +12,8 @@ namespace TwitterMlbBot.Mlb
         public string Division { get; }
         public int Wins { get; }
         public int Losses { get; }
+        public bool ClinchedDivision { get; }
+        public bool ClinchedWildCard { get; }
 
         /// <summary>
         /// 順位付けに使える成績を作る。作成後に勝敗などを書き換え、検証を迂回することはできない
@@ -21,7 +23,10 @@ namespace TwitterMlbBot.Mlb
         /// <param name="division">地区名（"East" / "Central" / "West"）</param>
         /// <param name="wins">勝ち数</param>
         /// <param name="losses">負け数</param>
-        public TeamStanding(string name, string league, string division, int wins, int losses)
+        /// <param name="clinchedDivision">地区優勝が確定しているか</param>
+        /// <param name="clinchedWildCard">ワイルドカード進出が確定しているか</param>
+        public TeamStanding(string name, string league, string division, int wins, int losses,
+            bool clinchedDivision = false, bool clinchedWildCard = false)
         {
             bool hasTeamIdentity = !string.IsNullOrWhiteSpace(name)
                 && !string.IsNullOrWhiteSpace(league)
@@ -40,6 +45,8 @@ namespace TwitterMlbBot.Mlb
             Division = division;
             Wins = wins;
             Losses = losses;
+            ClinchedDivision = clinchedDivision;
+            ClinchedWildCard = clinchedWildCard;
         }
 
         /// <summary>

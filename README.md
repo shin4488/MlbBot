@@ -7,7 +7,7 @@
 
 ## 概要とアーキテクチャ
 
-AWS EventBridge Scheduler により、各地区（East / Central / West）の現地時間 朝 07:00 に AWS Lambda が起動され、該当地区の順位表やワイルドカード争いの状況を自動投稿します。
+AWS EventBridge Scheduler により、各地区（East / Central / West）の現地時間 朝 07:00 に AWS Lambda が起動され、該当地区の順位表やワイルドカード争いの状況を自動投稿します。地区優勝が確定したチームには勝敗の後に `🏆`、ワイルドカード進出が確定したチームには `✅` を順位行に表示します。ワイルドカードの区切り線は従来通り、暫定的な圏内と圏外の境界を示します。
 
 ```mermaid
 flowchart LR
