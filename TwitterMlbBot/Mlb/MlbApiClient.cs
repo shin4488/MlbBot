@@ -111,14 +111,17 @@ namespace TwitterMlbBot.Mlb
             [property: JsonPropertyName("League")] string? League,
             [property: JsonPropertyName("Division")] string? Division,
             [property: JsonPropertyName("Wins")] int? Wins,
-            [property: JsonPropertyName("Losses")] int? Losses)
+            [property: JsonPropertyName("Losses")] int? Losses,
+            [property: JsonPropertyName("ClinchedDivision")] bool? ClinchedDivision,
+            [property: JsonPropertyName("ClinchedWildCard")] bool? ClinchedWildCard)
         {
             public TeamStanding ToTeamStanding(int year)
             {
                 // API項目の欠落を0勝・0敗で補わない。成績自体の妥当性はTeamStandingが保証する。
                 int wins = Wins ?? throw new InvalidOperationException($"{year}年の順位情報: 勝ち数が記載されていないチームがあるため、順位表を作成できません。");
                 int losses = Losses ?? throw new InvalidOperationException($"{year}年の順位情報: 負け数が記載されていないチームがあるため、順位表を作成できません。");
-                return new TeamStanding(Name ?? string.Empty, League ?? string.Empty, Division ?? string.Empty, wins, losses);
+                return new TeamStanding(Name ?? string.Empty, League ?? string.Empty, Division ?? string.Empty,
+                    wins, losses, ClinchedDivision == true, ClinchedWildCard == true);
             }
 
             /// <summary>

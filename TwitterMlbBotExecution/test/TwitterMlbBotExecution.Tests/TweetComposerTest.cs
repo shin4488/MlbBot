@@ -154,6 +154,22 @@ public class TweetComposerTest
     }
 
     [Fact]
+    public void Compose_地区優勝が確定した球団の行で直接示す()
+    {
+        var standings = new List<TeamStanding>
+        {
+            new("Mariners", "AL", "West", 94, 65, clinchedDivision: true),
+            new("Astros", "AL", "West", 86, 73),
+        };
+
+        string text = Assert.Single(Compose(standings)).Text;
+
+        Assert.Contains("1. Mariners 94-65 🏆", text);
+        Assert.DoesNotContain("Astros 86-73 🏆", text);
+        Assert.DoesNotContain("Division Champs", text);
+    }
+
+    [Fact]
     public void Compose_勝敗数がハイフン連結で入る()
     {
         var standings = new List<TeamStanding>
@@ -253,6 +269,28 @@ public class TweetComposerTest
     }
 
     [Fact]
+    public void ComposeWildCards_確定した球団だけを暫定順位と区別して示す()
+    {
+        var standings = new List<TeamStanding>
+        {
+            new("Yankees", "AL", "East", 96, 66, clinchedDivision: true),
+            new("Astros", "AL", "East", 90, 72, clinchedWildCard: true),
+            new("Red Sox", "AL", "East", 89, 73),
+            new("Tigers", "AL", "East", 86, 76),
+            new("Rangers", "AL", "East", 85, 77),
+        };
+        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
+
+        string text = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate)).Text;
+
+        Assert.Contains("Astros 90-72 ✅", text);
+        Assert.DoesNotContain("Red Sox 89-73 ✅", text);
+        Assert.DoesNotContain("WC clinched", text);
+        Assert.Contains("---", text);
+        Assert.DoesNotContain("Yankees", text);
+    }
+
+    [Fact]
     public void ComposeWildCards_全チームが圏内なら境界線を表示しない()
     {
         // 圏外チームがいない（データ欠け等で対象チームが少ない）場合に無意味な区切り線を出さない
@@ -308,7 +346,7 @@ public class TweetComposerTest
         // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数・2桁小数のゲーム差）にする
         var standings = new List<TeamStanding>
         {
-            Teams.Create("NL", "West", "Diamondbacks", 100, 62),
+            new TeamStanding("Diamondbacks", "NL", "West", 100, 62, clinchedDivision: true),
             Teams.Create("NL", "West", "Blue Jays", 89, 74),
             Teams.Create("NL", "West", "Guardians", 88, 75),
             Teams.Create("NL", "West", "Nationals", 87, 76),
@@ -316,6 +354,26 @@ public class TweetComposerTest
         };
 
         var tweet = Assert.Single(Compose(standings));
+
+        Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
+    }
+
+    [Fact]
+    public void ComposeWildCards_進出確定表示を含む文面はXの文字数上限内に収まる()
+    {
+        var standings = new List<TeamStanding>
+        {
+            new("Yankees", "AL", "East", 110, 52, clinchedDivision: true),
+            new("Diamondbacks", "AL", "East", 100, 62, clinchedWildCard: true),
+            new("Blue Jays", "AL", "East", 99, 63, clinchedWildCard: true),
+            new("Guardians", "AL", "East", 98, 64, clinchedWildCard: true),
+            new("Nationals", "AL", "East", 97, 65),
+            new("Mariners", "AL", "East", 96, 66),
+            new("White Sox", "AL", "East", 95, 67),
+        };
+        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
+
+        TweetContent tweet = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
 
         Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
     }

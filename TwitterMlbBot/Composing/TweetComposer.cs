@@ -79,7 +79,8 @@ namespace TwitterMlbBot.Composing
             {
                 // 首位のゲーム差（常に0）は意味を持たないため表示しない
                 float? gamesBehindToShow = rankedTeam.Rank > 1 ? rankedTeam.GamesBehind : null;
-                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
+                string? badge = rankedTeam.Team.ClinchedDivision ? "🏆" : null;
+                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow, badge);
             }
             buffer.AppendLine();
 
@@ -105,7 +106,8 @@ namespace TwitterMlbBot.Composing
                 float? gamesBehindToShow = rankedTeam.Rank > WildCardStanding.PlayoffSpots
                     ? rankedTeam.GamesBehind
                     : null;
-                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow);
+                string? badge = rankedTeam.Team.ClinchedWildCard ? "✅" : null;
+                AppendTeamRow(buffer, rankedTeam.Rank, rankedTeam.Team, gamesBehindToShow, badge);
             }
             buffer.AppendLine();
 
@@ -125,10 +127,10 @@ namespace TwitterMlbBot.Composing
         }
 
         /// <summary>
-        /// 「順位. チーム名 勝-負 (ゲーム差)」の1行を追加する。ゲーム差はnullなら表示しない。
+        /// 「順位. チーム名 勝-負 (ゲーム差) 確定表示」の1行を追加する。ゲーム差と確定表示はnullなら省く。
         /// Xはプロポーショナルフォント表示のため、空白での桁揃えはせず区切り文字形式とする
         /// </summary>
-        private static void AppendTeamRow(StringBuilder buffer, int rank, TeamStanding team, float? gamesBehind)
+        private static void AppendTeamRow(StringBuilder buffer, int rank, TeamStanding team, float? gamesBehind, string? badge)
         {
             buffer
                 .Append(rank.ToString(CultureInfo.InvariantCulture)).Append(". ")
@@ -140,6 +142,10 @@ namespace TwitterMlbBot.Composing
             if (gamesBehind is float value)
             {
                 buffer.Append(" (").Append(value.ToString("0.#", CultureInfo.InvariantCulture)).Append(')');
+            }
+            if (badge is not null)
+            {
+                buffer.Append(' ').Append(badge);
             }
             buffer.AppendLine();
         }
