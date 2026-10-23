@@ -90,7 +90,7 @@ namespace TwitterMlbBot.Authorization
 
         private static string CreateNonce()
         {
-            // 同一ミリ秒での衝突が理論上ありうるTicksではなく、一意性が保証されるGUIDを使う
+            // nonceはリクエストごとに一意にする。同じ時刻に作ると重複しうる時刻由来の値ではなく、ランダムなGUIDを使う
             return Guid.NewGuid().ToString("N");
         }
 

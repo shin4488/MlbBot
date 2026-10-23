@@ -3,8 +3,8 @@ using System.Net;
 namespace TwitterMlbBot.Mlb
 {
     /// <summary>
-    /// MLB APIの呼び出し失敗を表す例外
-    /// HTTP応答やデータ不正による取得失敗を、実装上の不具合と区別する。
+    /// MLB APIから情報を取得できなかったこと（HTTPエラー応答、日程データの不正）を表す例外。
+    /// 実装上の不具合による例外と区別するために使う。
     /// 応答本文は認証情報を含む可能性があるため保持しない。
     /// </summary>
     internal sealed class MlbApiException : Exception

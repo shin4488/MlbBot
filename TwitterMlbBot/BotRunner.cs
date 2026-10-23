@@ -47,7 +47,7 @@ namespace TwitterMlbBot
             IReadOnlyList<TeamStanding> standings = await standingsProvider.GetStandingsAsync(year);
             IReadOnlyList<TweetContent> tweets = composer.ComposeTweets(standings, date, group);
 
-            // 順位データが存在しない場合（シーズンオフ等）はツイートしない
+            // 順位データが存在しない場合（開幕前など）はツイートしない
             if (tweets.Count == 0)
             {
                 logger.LogInformation("順位データが空のためツイートしません");
@@ -102,7 +102,8 @@ namespace TwitterMlbBot
             }
         }
 
-        // HttpClientのタイムアウトだけを回復対象にし、通常のキャンセルや実装不具合は伝播させる。
+        // 通信障害とHttpClientのタイムアウトだけを回復対象にし、通常のキャンセルや実装不具合は伝播させる。
+        // HttpClientのタイムアウトは、内部例外がTimeoutExceptionのOperationCanceledExceptionとして届く。
         private static bool IsHttpFailure(Exception exception) =>
             exception is HttpRequestException
             || (exception is OperationCanceledException && exception.InnerException is TimeoutException);

@@ -78,9 +78,7 @@ namespace TwitterMlbBot.Composing
             bool shouldAddOfficialTag = officialHashtagMap.TryGetValue(teamName, out string? officialTag)
                 && !string.Equals(officialTag, nameNoSpace, StringComparison.OrdinalIgnoreCase);
             return shouldAddOfficialTag
-                // 公式タグ + 元チーム名タグの両方を付ける
                 ? $"#{officialTag} #{nameNoSpace}"
-                // 公式タグがチーム名と同じ場合（およびマップ未定義の場合）はチーム名タグのみ使用
                 : $"#{nameNoSpace}";
         }
     }
