@@ -9,7 +9,6 @@ on:
       - '.github/**'
       - '.vscode/**'
       - '.claude/**'
-      - '.agents/**'
       - '.codex/**'
       # インフラ定義の変更は関数コードに影響しない（適用はterraform applyで行う）
       - 'infra/**'
