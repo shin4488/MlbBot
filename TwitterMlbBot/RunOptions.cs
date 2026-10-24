@@ -22,6 +22,7 @@ internal record RunOptions(bool DryRun, int Year, DateOnly Date, PostingGroup Gr
                 continue;
             }
 
+            // 値のない--groupと2回目の--groupはここでは読まず、以降の年の処理で不正な引数として拒否する。
             bool canReadGroupValue = argument == "--group" && group is null && index + 1 < arguments.Length;
             if (canReadGroupValue)
             {

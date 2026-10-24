@@ -5,7 +5,7 @@
 
 ## 概要とアーキテクチャ
 
-AWS EventBridge Scheduler により、East / Central / West の各グループの代表タイムゾーンで朝 07:00 に AWS Lambda が起動され、ア・リーグとナ・リーグの該当地区の順位表を自動投稿します。表示日が8月以降は、West の実行でワイルドカード順位もあわせて投稿します。地区優勝が確定したチームには勝敗の後に `🏆`、ワイルドカード進出が確定したチームには `✅` を順位行に表示します。ワイルドカードの区切り線は、その時点の順位での圏内と圏外の境界を示します。
+AWS EventBridge Scheduler により、East / Central / West の各グループの代表タイムゾーンで朝 07:00 に AWS Lambda が起動され、ア・リーグとナ・リーグの該当地区の順位表を自動投稿します。文面に表示する日付（各グループの代表タイムゾーンでの実行日の前日）が8月以降の場合は、West の実行でワイルドカード順位もあわせて投稿します。地区優勝が確定したチームには勝敗の後に `🏆`、ワイルドカード進出が確定したチームには `✅` を順位行に表示します。ワイルドカードの区切り線は、その時点の順位での圏内と圏外の境界を示します。
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
     Lambda --> App["BotRunner<br>(実行制御・日程判定)"]
     App --> MLB["MLB Stats API・sportsdata.io<br>(日程・順位の取得)"]
     MLB --> App
-    App --> Compose["文面生成<br>(ハッシュタグ・文字数調整)"]
+    App --> Compose["文面生成<br>(順位表・ハッシュタグ)"]
     Compose --> X["X (Twitter) API<br>(順位表を自動投稿)"]
 ```
 
@@ -24,7 +24,7 @@ flowchart LR
 | `TwitterMlbBot/` | ボット本体（順位取得、文面の組み立て、X APIへの送信） |
 | `TwitterMlbBotExecution/` | AWS Lambda から呼ばれる入口（`src/`）と単体テスト（`test/`） |
 | `infra/` | AWS Lambda や EventBridge Scheduler などを管理する Terraform 定義（[infra/README.md](infra/README.md)） |
-| `docs/` | 投稿仕様と開発ガイド（[docs/development.md](docs/development.md)）、文面の改善案 |
+| `docs/` | 投稿仕様と開発ガイド（[docs/development.md](docs/development.md)）、ツイート内容の改善案（[docs/tweet-content-ideas.md](docs/tweet-content-ideas.md)） |
 
 ## ローカルでの実行（ドライラン）
 
@@ -75,7 +75,7 @@ dotnet build MlbBot.sln
 # 単体テストの実行
 dotnet test MlbBot.sln
 
-# 書式の修正（CIでは --verify-no-changes で未修正の差分がないことを検証）
+# 書式の修正（CIでは --verify-no-changes を付けて実行し、書式の修正が必要な箇所がないことを確かめる）
 dotnet format MlbBot.sln
 ```
 

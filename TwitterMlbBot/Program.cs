@@ -27,12 +27,12 @@ namespace TwitterMlbBot
             using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
                 builder.AddSimpleConsole(console => console.SingleLine = true));
 
-            // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）
             IStandingsProvider standingsProvider = new MlbApiClient(
                 httpClient,
                 RequireEnvironmentVariable("MLB_API_KEY"),
                 loggerFactory.CreateLogger<MlbApiClient>());
-            // ドライランかどうかは起動引数と環境変数から1回だけ決まり、全グループで同じ値になる
+            // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）。
+            // ドライランかどうかは全グループで同じ値なので、先頭の実行オプションで判定する。
             ITweetSender tweetSender = options[0].DryRun
                 ? new DryRunTweetSender(Console.Out)
                 : new TwitterApiSender(

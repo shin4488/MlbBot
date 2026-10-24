@@ -30,8 +30,8 @@ namespace TwitterMlbBot.Twitter
         {
             if (hasSentBefore)
             {
-                // 間隔は「送信後」ではなく「次の送信前」に空ける。最後の1件の後に待つ必要はなく、
-                // Lambdaの実行時間（課金）を1秒無駄にしないため
+                // 間隔は送信後ではなく次の送信前に空ける。
+                // 最後の1件の後に待ってLambdaの実行時間（課金）を延ばさないため
                 await Task.Delay(postInterval);
             }
             hasSentBefore = true;

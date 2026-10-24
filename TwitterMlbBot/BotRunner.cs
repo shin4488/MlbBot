@@ -7,8 +7,8 @@ namespace TwitterMlbBot
 {
     /// <summary>
     /// 「シーズン判定 → 順位取得 → 文面組み立て → 送信」の流れと失敗時の方針を持つ。
-    /// 接続先はinterfaceで差し替え、外部I/Oのない文面生成はTweetComposerを直接使う。
-    /// 実装が1つの純粋な処理まで抽象化せず、読み進める際の行き来を減らす
+    /// 接続先はinterfaceで差し替える。
+    /// 外部I/Oがなく実装も1つしかない文面生成はinterfaceにせずTweetComposerを直接使い、読むときのファイルの行き来を減らす
     /// </summary>
     internal class BotRunner
     {
@@ -86,8 +86,8 @@ namespace TwitterMlbBot
 
         /// <summary>
         /// ツイートを1件送信し、成否を返す。
-        /// HTTPタイムアウト・ネットワーク障害は「その1件の失敗」として扱い、
-        /// 残りの地区のツイートまで道連れにしない。全件失敗した場合の扱いは呼び出し側が決める
+        /// HTTPタイムアウト・通信障害はその1件の失敗として扱い、残りの文面の送信を続ける。
+        /// 全件失敗した場合の扱いは呼び出し側が決める
         /// </summary>
         private async Task<bool> TrySendAsync(TweetContent tweetContent)
         {

@@ -14,7 +14,7 @@ help:
 	  '  make tf-apply     差分を確認して適用（人間が実行）' \
 	  '  make tf-fmt       infra全体の書式を整える' \
 	  '  make tf-validate  設定の整合性を検証' \
-	  '  make tf-test      モジュールの準備・テスト（AWS接続なし）' \
+	  '  make tf-test      モジュール・環境設定のテスト（AWS接続なし）' \
 	  'プロファイルは.envで設定（.env.exampleを参照）'
 
 # 指定漏れで既定の認証情報に切り替わると、意図しない権限で実行してしまう。
