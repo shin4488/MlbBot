@@ -28,8 +28,8 @@ flowchart LR
 
 | 項目 | 仕様 | 詳細・具体例 |
 | --- | --- | --- |
-| **起動時刻** | 各代表タイムゾーンの現地時間 07:00 | サマータイム（夏時間）は EventBridge Scheduler とタイムゾーン変換で自動吸収 |
-| **表示日（対象日）** | 各代表タイムゾーンの前日日付 | ・順位取得年も前日の年を使用<br>・レギュラーシーズン最終日の翌朝実行時まで前日分（最終日分）の順位を投稿<br>・**WC適用例**: Westグループの8月1日朝実行（前日7月31日分）はWCなし、8月2日朝実行（前日8月1日分）からWC追加 |
+| **起動時刻** | 各代表タイムゾーンの現地時間 07:00 | 夏時間の切り替えは、EventBridge Scheduler のタイムゾーン指定と、アプリでのタイムゾーン変換で反映 |
+| **表示日（対象日）** | 各代表タイムゾーンの前日日付 | ・順位取得年も前日の年を使用（起動引数で年を指定した場合はその年）<br>・レギュラーシーズン最終日の翌朝実行時まで前日分（最終日分）の順位を投稿<br>・**WC適用例**: Westグループの8月1日朝実行（前日7月31日分）はWCなし、8月2日朝実行（前日8月1日分）からWC追加 |
 | **取得データの特性** | 起動時点でAPIから取得した最新順位 | ・前日の全試合終了や反映完了の待機・照合・再確認は行わない<br>・試合がない日や全試合延期の日でも、正常な順位データが取得できれば投稿 |
 | **球団検証** | 全30球団の存在・構成を検証 | グループ別の地区に絞り込む前に全30球団の存在を検証（ワイルドカード順位も全地区のデータから算出） |
 
@@ -45,7 +45,7 @@ flowchart LR
 
 - 日程APIのHTTPエラー・データ不正、通信障害・HTTPタイムアウトのみを回復対象とします。実装上の不具合や通常のキャンセルはそのまま伝播し、異常終了します。
 - 日程情報は [MLB公式Stats API](https://statsapi.mlb.com/)（認証不要）から取得します。
-- 対象年のシーズンIDで絞り込みを行い、対象データが存在しない・複数件ある・終了年の不整合がある場合は、日程取得失敗としてフォールバック判定を行います。
+- 対象年のシーズンIDで絞り込みを行い、対象データが存在しない・複数件ある・終了年の不整合がある場合は、上の表の「日程API・通信の失敗」と同じく表示日の月で続行か見送りかを決めます。
 - 判定ロジックの詳細は [SeasonCalendar](../TwitterMlbBot/Mlb/SeasonCalendar.cs) および [BotRunner](../TwitterMlbBot/BotRunner.cs) を参照してください。
 
 ## 順位表の作成と文面生成仕様
@@ -53,9 +53,9 @@ flowchart LR
 | 項目 | 仕様・処理内容 | 関連実装 |
 | --- | --- | --- |
 | **不完全データの除外と球団検証** | ・sportsdata.io から取得したデータから、All-Star用の擬似チーム（リーグ名と地区名が同一）を除外<br>・球団の重複、欠落、所属リーグ・地区の不整合がないかを検証（30球団構成の担保） | [MlbApiClient.cs](../TwitterMlbBot/Mlb/MlbApiClient.cs)<br>（`ValidateTeamCoverage`） |
-| **勝率・ゲーム差の算出** | ・API提供の丸め済み値は使用せず、勝敗数から算出<br>・**ゲーム差の基準**:<br>　- 地区順位: 首位チーム基準<br>　- ワイルドカード: プレーオフ圏内最終枠（当確ライン）基準 | [TeamStanding.cs](../TwitterMlbBot/Mlb/TeamStanding.cs)<br>（`GamesBehind`） |
-| **公式ハッシュタグの付与** | ・チーム名と公式ハッシュタグの対応表を管理<br>・シーズンごとのタグ変更に対応 | [HashtagProvider.cs](../TwitterMlbBot/Composing/HashtagProvider.cs) |
-| **文字数カウント仕様** | ・X API の仕様に準拠したカウント方式を採用<br>・結合絵文字等のカウント差異を考慮し、計算上の上限超過時でも警告ログを出力して送信を試行（実際の超過時はX API側でエラー） | [TweetContent.cs](../TwitterMlbBot/Composing/TweetContent.cs)<br>（`CharacterCount`） |
+| **勝率・ゲーム差の算出** | ・API提供の丸め済み値は使用せず、勝敗数から算出<br>・**ゲーム差の基準**:<br>　- 地区順位: 首位チーム基準<br>　- ワイルドカード: プレーオフ圏内の最終枠（ワイルドカード3位）基準 | [TeamStanding.cs](../TwitterMlbBot/Mlb/TeamStanding.cs)<br>（`GamesBehind`） |
+| **公式ハッシュタグの付与** | ・上位2チームに公式ハッシュタグとチーム名のハッシュタグを付与（両者が同じなら1つ）<br>・公式ハッシュタグはコード内の対応表で管理し、変更時は手動で更新 | [HashtagProvider.cs](../TwitterMlbBot/Composing/HashtagProvider.cs) |
+| **文字数カウント仕様** | ・Xの重み付きの数え方（ラテン文字などは1、CJK文字・絵文字などは2）で数え、結合絵文字は実際より多めに数える<br>・上限を超えると判定しても警告ログを出力して送信を試行（実際に超えていればX APIが拒否） | [TweetContent.cs](../TwitterMlbBot/Composing/TweetContent.cs)<br>（`CharacterCount`） |
 
 ## 送信制御とエラーハンドリング
 
@@ -76,10 +76,10 @@ flowchart LR
 
 | ディレクトリ / クラス | 主な責務 |
 | --- | --- |
-| [Program.cs](../TwitterMlbBot/Program.cs) | アプリケーションのエントリポイント。DIコンテナの構成、外部クライアントの初期化とリソース破棄を管理 |
+| [Program.cs](../TwitterMlbBot/Program.cs) | アプリケーションのエントリポイント。起動引数の解析（[RunOptions.cs](../TwitterMlbBot/RunOptions.cs)）、依存オブジェクトの組み立て、外部APIで共有する `HttpClient` の保持 |
 | [BotRunner.cs](../TwitterMlbBot/BotRunner.cs) | 実行フローの制御。日程判定、順位取得、文面生成、投稿実行、およびエラーハンドリングの統括 |
-| [Mlb/](../TwitterMlbBot/Mlb/) | 外部API（Stats API、sportsdata.io）との通信、データパース、球団構成検証 |
-| [TeamStanding.cs](../TwitterMlbBot/Mlb/TeamStanding.cs) | 球団成績データモデル。勝率およびゲーム差の計算処理 |
+| [Mlb/](../TwitterMlbBot/Mlb/) | 外部API（Stats API、sportsdata.io）との通信、データパース、球団構成検証、地区・ワイルドカード順位表のモデル |
+| [TeamStanding.cs](../TwitterMlbBot/Mlb/TeamStanding.cs) | 球団成績データモデル。勝率・ゲーム差の計算と順位付けの規則 |
 | [Composing/](../TwitterMlbBot/Composing/) | 投稿文面の組み立て、ハッシュタグ付与、文字数カウント |
 | [Twitter/](../TwitterMlbBot/Twitter/) | X API への投稿クライアント（実投稿用およびドライラン用） |
 
@@ -89,11 +89,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    F["Function<br>AWS Lambda エントリポイント<br>（EventBridge Schedulerから起動）"] --> P["Program.Main<br>起動オプション解析 & DI初期化"]
+    F["Function<br>AWS Lambda エントリポイント<br>（EventBridge Schedulerから起動）"] --> P["Program.Main<br>起動オプション解析 & 依存オブジェクトの組み立て"]
     P --> R["BotRunner.RunAsync<br>全体の実行制御"]
     R -->|① 日程確認| Cal["ISeasonCalendarProvider<br>（MLB公式 Stats API）"]
     R -->|② 順位取得| Std["IStandingsProvider<br>（sportsdata.io API）"]
-    R -->|③ 文面生成| Comp["TweetComposer<br>（ハッシュタグ・文字数計算）"]
+    R -->|③ 文面生成| Comp["TweetComposer<br>（順位表・ハッシュタグ）"]
     R -->|④ ツイート送信| Send["ITweetSender<br>（X API / ドライラン）"]
 
     click F "../TwitterMlbBotExecution/src/TwitterMlbBotExecution/Function.cs"
@@ -103,7 +103,7 @@ flowchart LR
 
 ### 日程と順位の取得
 
-`BotRunner` から各プロバイダーを呼び出し、外部APIから取得したデータをモデルへ変換・検証します。各処理はインターフェースを介して抽象化されており、単体テスト時のモック差し替えが可能です。
+`BotRunner` から各プロバイダーを呼び出し、外部APIから取得したデータをモデルへ変換・検証します。
 
 ```mermaid
 flowchart LR
@@ -116,16 +116,15 @@ flowchart LR
         MSC -->|取得結果| SC["SeasonCalendar<br>日程データモデル (終了判定)"]
     end
 
-    subgraph Standings["順位取得 & 計算"]
+    subgraph Standings["順位取得"]
         ISP["IStandingsProvider<br>順位取得インターフェース"] -->|実装| MAC["MlbApiClient<br>sportsdata.io APIクライアント"]
         MAC -->|取得結果| TS["TeamStanding<br>成績モデル (勝率・ゲーム差計算)"]
-        TS --> DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
     end
 
     BR1 -->|① 日程確認| ISC
     SC -.->|判定結果| BR1
     BR1 -->|② 順位取得| ISP
-    DS -.->|順位データ一覧| BR1
+    TS -.->|全チームの成績一覧| BR1
 
     click BR1 "../TwitterMlbBot/BotRunner.cs"
     click ISC "../TwitterMlbBot/Mlb/ISeasonCalendarProvider.cs"
@@ -134,12 +133,11 @@ flowchart LR
     click ISP "../TwitterMlbBot/Mlb/IStandingsProvider.cs"
     click MAC "../TwitterMlbBot/Mlb/MlbApiClient.cs"
     click TS "../TwitterMlbBot/Mlb/TeamStanding.cs"
-    click DS "../TwitterMlbBot/Mlb/"
 ```
 
 ### 文面生成と投稿
 
-`BotRunner` が取得した順位データを `TweetComposer` に渡し、文面を組み立てた後に `ITweetSender` へ渡して送信します。送信インターフェースの実装を切り替えることで、Xへの実投稿とローカルでのドライラン（コンソール出力）を同一ロジックで実行します。
+`BotRunner` が取得した全チームの成績を `TweetComposer` に渡し、`TweetComposer` が地区・ワイルドカードの順位表を作って文面を組み立てた後、`BotRunner` が `ITweetSender` へ渡して送信します。送信インターフェースの実装を切り替えることで、Xへの実投稿とローカルでのドライラン（コンソール出力）を同一ロジックで実行します。
 
 ```mermaid
 flowchart LR
@@ -148,7 +146,8 @@ flowchart LR
     end
 
     subgraph Composer["文面生成"]
-        C["TweetComposer<br>投稿種別・時期判定・文面生成"] -->|タグ取得| H["HashtagProvider<br>公式ハッシュタグ対応表"]
+        C["TweetComposer<br>投稿種別・時期判定・文面生成"] -->|順位表を作成| DS["DivisionStanding / WildCardStanding<br>地区・ワイルドカード順位表"]
+        C -->|タグ取得| H["HashtagProvider<br>公式ハッシュタグ対応表"]
         C -->|文面生成| T["TweetContent<br>投稿モデル (文字数超過判定)"]
     end
 
@@ -165,6 +164,7 @@ flowchart LR
 
     click BR2 "../TwitterMlbBot/BotRunner.cs"
     click C "../TwitterMlbBot/Composing/TweetComposer.cs"
+    click DS "../TwitterMlbBot/Mlb/"
     click H "../TwitterMlbBot/Composing/HashtagProvider.cs"
     click T "../TwitterMlbBot/Composing/TweetContent.cs"
     click I "../TwitterMlbBot/Twitter/ITweetSender.cs"
@@ -176,11 +176,12 @@ flowchart LR
 ## 正常系・例外系の実行シーケンス
 
 外部APIへの通信には共通の [ApiHttpClientFactory](../TwitterMlbBot/ApiHttpClientFactory.cs) を使い、転送禁止・タイムアウト・応答サイズ上限を適用します。
+
 処理の流れとエラーハンドリングの全体像を、役割に応じた3つのフェーズに分けて記載します。
 
 ### 1. 起動・初期化シーケンス
 
-起動引数・投稿グループの検証、必須環境変数の確認、および依存関係の組み立て（DI）を行います。
+起動引数・投稿グループの検証、必須環境変数の確認、および依存オブジェクトの組み立てを行います。
 
 ```mermaid
 sequenceDiagram
@@ -202,7 +203,7 @@ sequenceDiagram
         P-->>Entry: InvalidOperationException で異常終了
     end
 
-    loop 実行グループごと（通常は1グループ、ドライラン未指定時は3グループ順次）
+    loop 実行グループごと（通常は1グループ、グループ未指定のドライランでは3グループ順次）
         P->>B: RunAsync(年・表示日・グループ)
         Note over B: 【次フェーズ: 2. 日程確認・順位取得・文面生成へ】
         B-->>P: グループ処理の完了（または例外伝播）
@@ -260,7 +261,7 @@ sequenceDiagram
         S->>S: 成功応答ならParseStandings（年・応答）
         Note over S: JSON解析 → null要素拒否 → 擬似チーム除外<br/>勝敗確認 → TeamStanding生成 → 球団重複・30球団構成検証
         break 順位の取得・解析・検証が失敗
-            Note over S: HTTP不成功はMlbApiException<br/>JSON不正・構成不正はInvalidOperationException
+            Note over S: HTTP不成功はMlbApiException<br/>JSON不正・勝敗欠落・構成不正はInvalidOperationException<br/>チーム名等の空欄・負の勝敗はArgumentException
             S-->>B: 例外（取得側で包み直さず伝播）
             B-->>P: 例外をそのまま伝播
         end
@@ -286,7 +287,7 @@ sequenceDiagram
 
 ### 3. ツイート送信・エラーハンドリングシーケンス
 
-生成された文面一覧を1件ずつ順に送信します。二重投稿を防止するため自動再送は行わず、レート制限待機やエラー時のフォールスルー制御を行います。
+生成された文面一覧を1件ずつ順に送信します。二重投稿を防ぐため自動再送は行いません。レート制限を避けるため投稿の間に待機を入れ、通信障害やHTTPエラーで1件が失敗しても残りの文面の送信を続けます。
 
 ```mermaid
 sequenceDiagram

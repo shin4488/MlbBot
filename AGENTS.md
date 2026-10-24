@@ -4,7 +4,7 @@ MLBの順位表をXに投稿するAWS Lambdaボット。本体の入口は [Prog
 
 ## 必ず守ること
 
-- **ローカル確認はドライランのみ。** 通常モードは実投稿する。`FunctionTest` は本番の `Program.Main` を呼ぶ手動疎通専用で、**Skipを外したままテストを一括実行しない**。
+- **ローカル確認はドライランのみ。** 通常モードは実投稿する。`FunctionTest.RunProductionFlow` は本番の `Program.Main` を呼ぶ手動疎通専用で、**Skipを外したままテストを一括実行しない**。
 - **masterへ直接pushしない。** 管理者にもbranch protectionが適用され、PRとCIの `build-and-test` 通過が必須。masterへのマージは本番デプロイにつながる。対象は [ワークフロー](.github/workflows/lambda_deploy.yml) の `paths-ignore` を確認する。
 - **APIキー・環境固有値をgit管理ファイルに書かない。** 設定は環境変数、ローカルの環境固有値はGit管理外のファイルに置く。設定例は実値への変更なしでは必ず失敗する `.example` のみ。コミット前にgitleaks・git-secretsで混入を確認する。
 - **`terraform apply` / `terraform destroy` はレビュー後に人間が実行する。** `make` 経由も同じ。エージェントは `plan`・`validate`・`fmt` まで。Makefileは `.env` の `TF_AWS_PROFILE` だけを読み、全体をsource・eval・includeしない。

@@ -16,11 +16,9 @@ namespace TwitterMlbBot
         private static readonly HttpClient httpClient = ApiHttpClientFactory.Create();
 
         /// <summary>
-        /// エントリーポイント
-        /// WebAPI接続の関係で非同期エントリーポイントとしている
+        /// 外部APIの応答を待つため、非同期のエントリーポイントにしている
         /// </summary>
-        /// <param name="args">起動引数（Lambdaでは検証対象のグループを渡す）</param>
-        /// <returns></returns>
+        /// <param name="args">起動引数（Lambdaからは投稿対象のグループを渡す）</param>
         public static async Task Main(string[]? args)
         {
             IReadOnlyList<RunOptions> options = RunOptions.Parse(args, Environment.GetEnvironmentVariable("DRY_RUN"), DateTime.UtcNow);
@@ -29,12 +27,12 @@ namespace TwitterMlbBot
             using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
                 builder.AddSimpleConsole(console => console.SingleLine = true));
 
-            // 依存関係の組み立て
-            // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）
             IStandingsProvider standingsProvider = new MlbApiClient(
                 httpClient,
                 RequireEnvironmentVariable("MLB_API_KEY"),
                 loggerFactory.CreateLogger<MlbApiClient>());
+            // ドライラン時はDryRunTweetSenderを使い、X API認証情報の読み込み自体を行わない（誤投稿を構造的に防ぐ）。
+            // ドライランかどうかは全グループで同じ値なので、先頭の実行オプションで判定する。
             ITweetSender tweetSender = options[0].DryRun
                 ? new DryRunTweetSender(Console.Out)
                 : new TwitterApiSender(

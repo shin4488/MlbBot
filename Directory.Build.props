@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- 警告（null許容の見落とし・非推奨API等）を放置したままmasterへ入らないようにする。
-         現状警告ゼロのため、新たな警告はその変更（依存パッケージの更新を含む）で直す運用 -->
+         新たな警告は、その警告を生んだ変更（依存パッケージの更新を含む）の中で直す -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

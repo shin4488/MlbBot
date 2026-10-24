@@ -22,6 +22,7 @@ internal record RunOptions(bool DryRun, int Year, DateOnly Date, PostingGroup Gr
                 continue;
             }
 
+            // 値のない--groupと2回目の--groupはここでは読まず、以降の年の処理で不正な引数として拒否する。
             bool canReadGroupValue = argument == "--group" && group is null && index + 1 < arguments.Length;
             if (canReadGroupValue)
             {
@@ -78,6 +79,7 @@ internal record RunOptions(bool DryRun, int Year, DateOnly Date, PostingGroup Gr
         };
         TimeZoneInfo timeZone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
         DateTime localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
+        // 朝の実行で投稿する順位は前日の試合結果を反映したものなので、文面の日付も試合日である前日にする。
         DateOnly date = DateOnly.FromDateTime(localNow).AddDays(-1);
         return new RunOptions(dryRun, year ?? date.Year, date, group);
     }

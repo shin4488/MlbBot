@@ -34,7 +34,7 @@ runs:
       run: dotnet format "$SOLUTION" --verify-no-changes --no-restore
 
     - name: Test
-      # FunctionTestは実ツイートが投稿されるためSkip指定済み（FunctionTest.cs参照）
+      # FunctionTest.RunProductionFlowは実ツイートを投稿するためSkip指定済み
       shell: bash
       env:
         SOLUTION: ${{ inputs.solution }}

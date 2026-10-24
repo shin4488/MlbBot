@@ -343,7 +343,7 @@ public class TweetComposerTest
         // 実在の公式タグマップを意図的に使う数少ないテスト:
         // 「長いチーム名 + 長い公式タグ」の組み合わせが上限を超えないことの回帰検証で、
         // タグマップの変更（毎シーズンありうる）で文字数超過が起きたらここで検出する
-        // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数・2桁小数のゲーム差）にする
+        // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数、11.5のような2桁で小数付きのゲーム差）にする
         var standings = new List<TeamStanding>
         {
             new TeamStanding("Diamondbacks", "NL", "West", 100, 62, clinchedDivision: true),
