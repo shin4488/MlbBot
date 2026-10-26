@@ -10,25 +10,29 @@ namespace TwitterMlbBotExecution.Tests;
 /// 文面組み立て（TweetComposer）のテスト
 ///
 /// テストは仕様ベースで書く方針:
+/// BotRunnerと同じく全チームの成績・表示日・グループを渡し、
 /// 「日付と順位・勝敗・ゲーム差が文面に反映される」「タグは上位2チーム分」といった
 /// 仕様レベルの不変条件を検証する。ハッシュタグの検証には公式タグマップに
 /// 載っていないチーム名を使い、シーズンごとのマップ変更に依存させない。
 /// </summary>
 public class TweetComposerTest
 {
+    // 8月の日付。Centralグループは地区の文面だけ、Westグループはワイルドカードの文面も作る
+    private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
+
     [Theory]
     [InlineData("fr-FR")]
     [InlineData("ja-JP")]
-    public void Compose_実行環境の言語によらず英語表記の日付と小数を使う(string cultureName)
+    public void ComposeTweets_実行環境の言語によらず英語表記の日付と小数を使う(string cultureName)
     {
         CultureInfo previous = CultureInfo.CurrentCulture;
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
-            string text = Assert.Single(Compose(new List<TeamStanding>
+            string text = Assert.Single(ComposeCentralTweets(new List<TeamStanding>
             {
-                Teams.Create("AL", "East", "First", 84, 56),
-                Teams.Create("AL", "East", "Second", 70, 71),
+                Teams.Create("AL", "Central", "First", 84, 56),
+                Teams.Create("AL", "Central", "Second", 70, 71),
             })).Text;
 
             Assert.Contains("8/30", text);
@@ -40,36 +44,27 @@ public class TweetComposerTest
         }
     }
 
-    private static readonly DateOnly testDate = new DateOnly(2026, 8, 30);
-
     [Fact]
-    public void 生成した文面リストは入力や受け取り側の操作で変更されない()
+    public void ComposeTweets_生成した文面リストは入力や受け取り側の操作で変更されない()
     {
         var source = new List<TeamStanding>
         {
-            Teams.Create("AL", "East", "Alpha", 90, 50),
-            Teams.Create("AL", "East", "Beta", 80, 60),
+            Teams.Create("AL", "West", "Alpha", 90, 50),
+            Teams.Create("AL", "West", "Beta", 80, 60),
         };
-        var composer = new TweetComposer(new HashtagProvider());
-        var divisions = DivisionStanding.FromStandings(source);
-        var results = new[]
-        {
-            composer.ComposeTweets(source, testDate, PostingGroup.East),
-            composer.Compose(divisions, testDate),
-            composer.ComposeWildCards(WildCardStanding.FromDivisions(divisions), testDate),
-        };
+
+        var tweets = new TweetComposer(new HashtagProvider()).ComposeTweets(source, testDate, PostingGroup.West);
         source.Clear();
 
-        foreach (var tweets in results)
+        // 地区とワイルドカードの両方の文面が、入力を消した後も残る
+        Assert.Equal(2, tweets.Count);
+        Assert.All(tweets, tweet => Assert.Contains("Beta", tweet.Text));
+        var expected = tweets.ToArray();
+        if (tweets is IList<TweetContent> writable)
         {
-            Assert.Contains(tweets, tweet => tweet.Text.Contains("Beta"));
-            var expected = tweets.ToArray();
-            if (tweets is IList<TweetContent> writable)
-            {
-                Assert.ThrowsAny<Exception>(() => writable.Clear());
-            }
-            Assert.Equal(expected, tweets);
+            Assert.ThrowsAny<Exception>(() => writable.Clear());
         }
+        Assert.Equal(expected, tweets);
     }
 
     [Theory]
@@ -104,27 +99,29 @@ public class TweetComposerTest
         Assert.Empty(tweets);
     }
 
-    private static IReadOnlyList<TweetContent> Compose(List<TeamStanding> standings)
+    /// <summary>
+    /// Centralグループの文面を作る。Centralグループはワイルドカードを投稿しないため、地区の文面だけを検証できる
+    /// </summary>
+    private static IReadOnlyList<TweetContent> ComposeCentralTweets(IReadOnlyList<TeamStanding> standings)
     {
-        return new TweetComposer(new HashtagProvider())
-            .Compose(DivisionStanding.FromStandings(standings), testDate);
+        return new TweetComposer(new HashtagProvider()).ComposeTweets(standings, testDate, PostingGroup.Central);
     }
 
     [Fact]
-    public void Compose_日付がヘッダに入る()
+    public void ComposeTweets_地区の文面のヘッダに日付が入る()
     {
         var standings = new List<TeamStanding>
         {
             Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.Contains("8/30", text);
     }
 
     [Fact]
-    public void Compose_勝率の高い順に列挙される()
+    public void ComposeTweets_地区の文面は勝率の高い順に列挙される()
     {
         // 入力はあえて順位順に並べない（APIの並び順に依存しない仕様の検証）
         var standings = new List<TeamStanding>
@@ -134,35 +131,35 @@ public class TweetComposerTest
             Teams.Create("AL", "Central", "Athletics", 56, 84),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.True(text.IndexOf("White Sox") < text.IndexOf("Astros"), "勝率1位のチームが先に出力されること");
         Assert.True(text.IndexOf("Astros") < text.IndexOf("Athletics"), "勝率2位のチームが3位より先に出力されること");
     }
 
     [Fact]
-    public void Compose_数字の意味がわかる凡例が入る()
+    public void ComposeTweets_地区の文面に数字の意味がわかる凡例が入る()
     {
         var standings = new List<TeamStanding>
         {
             Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.Contains("W-L (GB)", text);
     }
 
     [Fact]
-    public void Compose_地区優勝が確定した球団の行で直接示す()
+    public void ComposeTweets_地区優勝が確定した球団の行で直接示す()
     {
         var standings = new List<TeamStanding>
         {
-            new("Mariners", "AL", "West", 94, 65, clinchedDivision: true),
-            new("Astros", "AL", "West", 86, 73),
+            new("Mariners", "AL", "Central", 94, 65, clinchedDivision: true),
+            new("Astros", "AL", "Central", 86, 73),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.Contains("1. Mariners 94-65 🏆", text);
         Assert.DoesNotContain("Astros 86-73 🏆", text);
@@ -170,20 +167,20 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void Compose_勝敗数がハイフン連結で入る()
+    public void ComposeTweets_勝敗数がハイフン連結で入る()
     {
         var standings = new List<TeamStanding>
         {
             Teams.Create("AL", "Central", "White Sox", 84, 56),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.Contains("84-56", text);
     }
 
     [Fact]
-    public void Compose_ゲーム差は2位以下にのみ表示される()
+    public void ComposeTweets_地区のゲーム差は2位以下にのみ表示される()
     {
         var standings = new List<TeamStanding>
         {
@@ -191,7 +188,7 @@ public class TweetComposerTest
             Teams.Create("AL", "Central", "Astros", 70, 71),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         // 2位のゲーム差（首位の貯金28、2位の貯金-1 → 14.5）は表示される
         Assert.Contains("(14.5)", text);
@@ -200,17 +197,17 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void Compose_地区ごとに1件の文面が生成される()
+    public void ComposeTweets_対象グループの地区ごとに1件の文面が生成される()
     {
         var standings = new List<TeamStanding>
         {
             Teams.Create("AL", "Central", "White Sox", 84, 56),
             Teams.Create("AL", "Central", "Astros", 70, 70),
-            Teams.Create("NL", "West", "Dodgers", 82, 48),
-            Teams.Create("NL", "West", "Rockies", 60, 70),
+            Teams.Create("NL", "Central", "Dodgers", 82, 48),
+            Teams.Create("NL", "Central", "Rockies", 60, 70),
         };
 
-        var tweets = Compose(standings);
+        var tweets = ComposeCentralTweets(standings);
 
         Assert.Equal(2, tweets.Count);
         var alTweet = Assert.Single(tweets, tweet => tweet.Text.Contains("White Sox"));
@@ -218,13 +215,7 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void Compose_順位表が空なら空リストを返す()
-    {
-        Assert.Empty(Compose(new List<TeamStanding>()));
-    }
-
-    [Fact]
-    public void Compose_タグには全体タグと上位2チームのタグが入る()
+    public void ComposeTweets_地区のタグには全体タグと上位2チームのタグが入る()
     {
         var standings = new List<TeamStanding>
         {
@@ -233,7 +224,7 @@ public class TweetComposerTest
             Teams.Create("AL", "Central", "Athletics", 56, 84),
         };
 
-        string text = Assert.Single(Compose(standings)).Text;
+        string text = Assert.Single(ComposeCentralTweets(standings)).Text;
 
         Assert.Contains("#MLB", text);
         // チーム名のスペースは除去されてタグになる
@@ -244,9 +235,9 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void ComposeWildCards_ヘッダと日付と凡例が入る()
+    public void ComposeTweets_ワイルドカードの文面にヘッダと日付と凡例が入る()
     {
-        string text = ComposeWildCard().Text;
+        string text = ComposeWildCardTweet(CreateWildCardRace()).Text;
 
         Assert.Contains("Wild Card", text);
         Assert.Contains("8/30", text);
@@ -254,22 +245,24 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void ComposeWildCards_プレーオフ圏内はゲーム差非表示_圏外は境界線の後に表示される()
+    public void ComposeTweets_ワイルドカードのプレーオフ圏内はゲーム差非表示_圏外は境界線の後に表示される()
     {
-        string text = ComposeWildCard().Text;
-        string[] lines = text.Split('\n');
+        string text = ComposeWildCardTweet(CreateWildCardRace()).Text;
+        string[] lines = text.Split('\n', StringSplitOptions.TrimEntries);
 
         // 圏内1〜3位の行にはゲーム差の括弧が付かない
         Assert.All(
             lines.Where(line => line.StartsWith("1.") || line.StartsWith("2.") || line.StartsWith("3.")),
             line => Assert.DoesNotContain("(", line));
-        // 圏内と圏外の間に境界線があり、圏外チームにはボーダーとのゲーム差が表示される
-        Assert.Contains("---", text);
-        Assert.Contains(lines, line => line.StartsWith("4.") && line.Contains("(1)"));
+        // 圏内の3位と圏外の4位の間に境界線があり、圏外チームにはボーダーとのゲーム差が表示される
+        int borderIndex = Array.IndexOf(lines, "---");
+        Assert.StartsWith("3.", lines[borderIndex - 1]);
+        Assert.StartsWith("4.", lines[borderIndex + 1]);
+        Assert.Contains("(1)", lines[borderIndex + 1]);
     }
 
     [Fact]
-    public void ComposeWildCards_確定した球団だけを暫定順位と区別して示す()
+    public void ComposeTweets_ワイルドカード進出が確定した球団だけを暫定順位と区別して示す()
     {
         var standings = new List<TeamStanding>
         {
@@ -279,9 +272,8 @@ public class TweetComposerTest
             new("Tigers", "AL", "East", 86, 76),
             new("Rangers", "AL", "East", 85, 77),
         };
-        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
 
-        string text = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate)).Text;
+        string text = ComposeWildCardTweet(standings).Text;
 
         Assert.Contains("Astros 90-72 ✅", text);
         Assert.DoesNotContain("Red Sox 89-73 ✅", text);
@@ -291,7 +283,7 @@ public class TweetComposerTest
     }
 
     [Fact]
-    public void ComposeWildCards_全チームが圏内なら境界線を表示しない()
+    public void ComposeTweets_ワイルドカードの全チームが圏内なら境界線を表示しない()
     {
         // 圏外チームがいない（データ欠け等で対象チームが少ない）場合に無意味な区切り線を出さない
         var standings = new List<TeamStanding>
@@ -300,29 +292,28 @@ public class TweetComposerTest
             Teams.Create("AL", "Central", "Astros", 88, 52),
             Teams.Create("AL", "Central", "Dodgers", 87, 53),
         };
-        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
 
-        var tweet = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
+        var tweet = ComposeWildCardTweet(standings);
 
         Assert.DoesNotContain("---", tweet.Text);
     }
 
     [Fact]
-    public void ComposeWildCards_表示は6チームまで()
+    public void ComposeTweets_ワイルドカードの表示は6チームまで()
     {
-        string text = ComposeWildCard().Text;
+        string text = ComposeWildCardTweet(CreateWildCardRace()).Text;
 
         Assert.Contains("6. ", text);
         Assert.DoesNotContain("7. ", text);
     }
 
     /// <summary>
-    /// 1リーグ・首位1チーム＋ワイルドカード7チームのデータでWCツイートを1件生成する
-    /// （7番目のチームは表示上限の検証用）
+    /// 1リーグ・首位1チーム＋ワイルドカード7チームの成績
+    /// （7番目のチームは表示上限の検証用。4位のCubsはボーダーの3位Rockiesと1ゲーム差）
     /// </summary>
-    private static TweetContent ComposeWildCard()
+    private static List<TeamStanding> CreateWildCardRace()
     {
-        var standings = new List<TeamStanding>
+        return new List<TeamStanding>
         {
             Teams.Create("AL", "Central", "White Sox", 95, 45),
             Teams.Create("AL", "Central", "Astros", 88, 52),
@@ -333,12 +324,20 @@ public class TweetComposerTest
             Teams.Create("AL", "Central", "Athletics", 80, 60),
             Teams.Create("AL", "Central", "Mets", 78, 62),
         };
-        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
-        return Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
+    }
+
+    /// <summary>
+    /// Westグループの8月の文面から、ALのワイルドカードの文面を1件取り出す。
+    /// ワイルドカードは対象グループ以外の地区も含めた全地区から作られる
+    /// </summary>
+    private static TweetContent ComposeWildCardTweet(IReadOnlyList<TeamStanding> standings)
+    {
+        var tweets = new TweetComposer(new HashtagProvider()).ComposeTweets(standings, testDate, PostingGroup.West);
+        return Assert.Single(tweets, tweet => tweet.Text.Contains("AL Wild Card"));
     }
 
     [Fact]
-    public void Compose_文面はXの文字数上限280字以内に収まる()
+    public void ComposeTweets_地区の文面はXの文字数上限280字以内に収まる()
     {
         // 実在の公式タグマップを意図的に使う数少ないテスト:
         // 「長いチーム名 + 長い公式タグ」の組み合わせが上限を超えないことの回帰検証で、
@@ -346,20 +345,20 @@ public class TweetComposerTest
         // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数、11.5のような2桁で小数付きのゲーム差）にする
         var standings = new List<TeamStanding>
         {
-            new TeamStanding("Diamondbacks", "NL", "West", 100, 62, clinchedDivision: true),
-            Teams.Create("NL", "West", "Blue Jays", 89, 74),
-            Teams.Create("NL", "West", "Guardians", 88, 75),
-            Teams.Create("NL", "West", "Nationals", 87, 76),
-            Teams.Create("NL", "West", "Twins", 86, 77),
+            new TeamStanding("Diamondbacks", "NL", "Central", 100, 62, clinchedDivision: true),
+            Teams.Create("NL", "Central", "Blue Jays", 89, 74),
+            Teams.Create("NL", "Central", "Guardians", 88, 75),
+            Teams.Create("NL", "Central", "Nationals", 87, 76),
+            Teams.Create("NL", "Central", "Twins", 86, 77),
         };
 
-        var tweet = Assert.Single(Compose(standings));
+        var tweet = Assert.Single(ComposeCentralTweets(standings));
 
         Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
     }
 
     [Fact]
-    public void ComposeWildCards_進出確定表示を含む文面はXの文字数上限内に収まる()
+    public void ComposeTweets_進出確定表示を含むワイルドカードの文面はXの文字数上限内に収まる()
     {
         var standings = new List<TeamStanding>
         {
@@ -371,9 +370,8 @@ public class TweetComposerTest
             new("Mariners", "AL", "East", 96, 66),
             new("White Sox", "AL", "East", 95, 67),
         };
-        var wildCards = WildCardStanding.FromDivisions(DivisionStanding.FromStandings(standings));
 
-        TweetContent tweet = Assert.Single(new TweetComposer(new HashtagProvider()).ComposeWildCards(wildCards, testDate));
+        TweetContent tweet = ComposeWildCardTweet(standings);
 
         Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
     }

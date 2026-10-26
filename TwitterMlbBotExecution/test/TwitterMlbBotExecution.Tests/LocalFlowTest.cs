@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using TwitterMlbBot;
@@ -20,11 +19,17 @@ public class LocalFlowTest
 
     private static IReadOnlyList<TeamStanding> teams => StandingsFixture.Teams;
 
-    private static string StandingsJson => JsonSerializer.Serialize(teams.Concat(new[]
+    private static string StandingsJson
     {
-        new TeamStanding("AL All-Stars", "AL", "AL", 0, 0),
-        new TeamStanding("NL All-Stars", "NL", "NL", 0, 0),
-    }));
+        get
+        {
+            // 実際の応答には、30球団に加えてリーグ名と地区名が同一のAll-Star用の擬似チームが含まれる
+            JsonArray response = StandingsFixture.CreateResponse();
+            response.Add(JsonNode.Parse("""{"Name":"AL All-Stars","League":"AL","Division":"AL","Wins":0,"Losses":0}"""));
+            response.Add(JsonNode.Parse("""{"Name":"NL All-Stars","League":"NL","Division":"NL","Wins":0,"Losses":0}"""));
+            return response.ToJsonString();
+        }
+    }
 
     [Theory]
     [InlineData(7, 31, 2)]
@@ -158,20 +163,28 @@ public class LocalFlowTest
         using var output = new StringWriter();
         var sender = new RecordingDryRunSender(output);
         using var client = CreateClient(calendarJson, StandingsJson, allowStandings: count > 0);
-        var date = new DateOnly(2026, month, day);
-        var selected = Enum.Parse<PostingGroup>(group);
-        await CreateRunner(client, sender).RunAsync(2026, date, selected);
+
+        await CreateRunner(client, sender).RunAsync(2026, new DateOnly(2026, month, day), Enum.Parse<PostingGroup>(group));
+
         Assert.Equal(count, sender.Contents.Count);
         if (count == 0) return;
-        Assert.Contains(sender.Contents.Take(2), content => content.Text.Contains($"AL {group}"));
-        Assert.Contains(sender.Contents.Take(2), content => content.Text.Contains($"NL {group}"));
-        var composer = new TweetComposer(new HashtagProvider());
-        var expectedDivisions = composer.Compose(DivisionStanding.FromStandings(teams.Where(team => team.Division == group)), date);
-        Assert.Equal(expectedDivisions.Select(content => content.Text), sender.Contents.Take(2).Select(content => content.Text));
-        if (count == 4)
+        // 先頭の2件は対象グループのAL・NLの地区で、その地区の5球団だけを載せる
+        string[] divisionTexts = sender.Contents.Take(2).Select(content => content.Text).ToArray();
+        foreach (string league in new[] { "AL", "NL" })
         {
-            var expectedWildCards = composer.ComposeWildCards(WildCardStanding.FromDivisions(DivisionStanding.FromStandings(teams)), date);
-            Assert.Equal(expectedWildCards.Select(content => content.Text), sender.Contents.Skip(2).Select(content => content.Text));
+            string text = Assert.Single(divisionTexts, text => text.Contains($"{league} {group}"));
+            Assert.All(teams, team => Assert.Equal(
+                team.League == league && team.Division == group, text.Contains(team.Name)));
+        }
+        if (count == 2) return;
+        // 西部のワイルドカードも全地区から作る。架空の球団は各地区で同じ成績なので、
+        // 各地区の首位（-0）を除いた2位（-1）・3位（-2）の6球団が、地区によらず表示される
+        string[] wildCardTexts = sender.Contents.Skip(2).Select(content => content.Text).ToArray();
+        foreach (string league in new[] { "AL", "NL" })
+        {
+            string text = Assert.Single(wildCardTexts, text => text.Contains($"{league} Wild Card"));
+            Assert.All(teams.Where(team => team.League == league), team => Assert.Equal(
+                team.Name.EndsWith("-1") || team.Name.EndsWith("-2"), text.Contains(team.Name)));
         }
     }
 

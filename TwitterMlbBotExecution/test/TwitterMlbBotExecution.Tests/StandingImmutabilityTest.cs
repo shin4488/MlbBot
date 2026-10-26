@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 using TwitterMlbBot.Mlb;
 using Xunit;
 
@@ -21,7 +23,7 @@ public class StandingImmutabilityTest
     }
 
     [Fact]
-    public void 公開する成績や順位表はリスト自体も書き換えられない()
+    public async Task 公開する成績や順位表はリスト自体も書き換えられない()
     {
         var source = new[]
         {
@@ -29,12 +31,13 @@ public class StandingImmutabilityTest
             Teams.Create("AL", "East", "Contender", 80, 60),
         };
         var divisions = DivisionStanding.FromStandings(source);
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(StandingsFixture.CreateResponse().ToJsonString()) })));
 
         AssertCannotChange(TeamStanding.OrderByRank(source));
         AssertCannotChange(divisions);
         AssertCannotChange(WildCardStanding.FromDivisions(divisions));
-        AssertCannotChange(MlbApiClient.ParseStandings(2026,
-            StandingsFixture.CreateResponse().ToJsonString()));
+        AssertCannotChange(await new MlbApiClient(client, "dummy-mlb-key", NullLogger<MlbApiClient>.Instance).GetStandingsAsync(2026));
     }
 
     private static void AssertCannotChange<T>(IReadOnlyList<T> items)
