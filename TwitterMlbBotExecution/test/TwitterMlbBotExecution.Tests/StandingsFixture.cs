@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using TwitterMlbBot.Mlb;
 
@@ -14,5 +13,18 @@ internal static class StandingsFixture
         select new TeamStanding($"{league}-{division}-{index}", league, division, 90 - index, 50 + index)
     ).ToList().AsReadOnly();
 
-    public static JsonArray CreateResponse() => JsonSerializer.SerializeToNode(Teams)!.AsArray();
+    /// <summary>
+    /// Teamsと同じ成績を、sportsdata.ioの順位APIの項目名で表した応答。
+    /// ドメインの型をそのまま直列化せず、型の名前を変えても配信元の形式が変わらないようにする
+    /// </summary>
+    public static JsonArray CreateResponse() => new(Teams.Select(team => (JsonNode)new JsonObject
+    {
+        ["Name"] = team.Name,
+        ["League"] = team.League,
+        ["Division"] = team.Division,
+        ["Wins"] = team.Wins,
+        ["Losses"] = team.Losses,
+        ["ClinchedDivision"] = team.ClinchedDivision,
+        ["ClinchedWildCard"] = team.ClinchedWildCard,
+    }).ToArray());
 }

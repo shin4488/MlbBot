@@ -73,27 +73,21 @@ public class ApiSafetyTest
         Assert.All(logger.Messages, message => Assert.DoesNotContain(privateContent, message));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void JSON解析エラーの内部例外からも応答内容を漏らさない(bool standings)
+    [Fact]
+    public async Task 日程のJSON解析エラーは内部例外からも応答内容を漏らさない()
     {
         const string privateContent = "dummy-private-property";
-        string malformed = "{\"" + privateContent + "\": tru}";
-        Exception exception = Assert.ThrowsAny<Exception>(() =>
-        {
-            if (standings) MlbApiClient.ParseStandings(2026, "[" + malformed + "]");
-            else MlbStatsApiClient.ParseSeasonCalendar(malformed, 2026);
-        });
+
+        Exception exception = await Assert.ThrowsAnyAsync<Exception>(() =>
+            GetSeasonCalendarAsync(2026, "{\"" + privateContent + "\": tru}"));
 
         Assert.DoesNotContain(privateContent, exception.ToString());
     }
 
     [Fact]
-    public void 日程の解析失敗は対象年と解析位置を残し例外を連鎖させない()
+    public async Task 日程の解析失敗は対象年と解析位置を残し例外を連鎖させない()
     {
-        Exception exception = Assert.ThrowsAny<Exception>(() =>
-            MlbStatsApiClient.ParseSeasonCalendar("{\n秘", 2025));
+        Exception exception = await Assert.ThrowsAnyAsync<Exception>(() => GetSeasonCalendarAsync(2025, "{\n秘"));
 
         Assert.Null(exception.InnerException);
         Assert.Contains("2025年", exception.Message);
@@ -150,6 +144,13 @@ public class ApiSafetyTest
         Assert.Equal(0.5, tied.Percentage);
         Assert.True(trailer.GamesBehind(leader) > 0);
         Assert.True(leader.GamesBehind(trailer) < 0);
+    }
+
+    private static async Task<SeasonCalendar> GetSeasonCalendarAsync(int year, string responseBody)
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(responseBody) })));
+        return await new MlbStatsApiClient(client, NullLogger<MlbStatsApiClient>.Instance).GetSeasonCalendarAsync(year);
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

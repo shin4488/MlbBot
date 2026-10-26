@@ -30,7 +30,10 @@ public class ApiTransportTest
 
         var teams = await provider.GetStandingsAsync(2026);
 
-        Assert.Equal(StandingsFixture.Teams, teams);
+        // 返却順は仕様にないため、チーム名順にそろえて比べる
+        Assert.Equal(
+            StandingsFixture.Teams.OrderBy(team => team.Name, StringComparer.Ordinal),
+            teams.OrderBy(team => team.Name, StringComparer.Ordinal));
         // 接続を他APIとも共有できるよう、認証情報を共通ヘッダーに残さない
         Assert.False(client.DefaultRequestHeaders.Contains("Ocp-Apim-Subscription-Key"));
     }
