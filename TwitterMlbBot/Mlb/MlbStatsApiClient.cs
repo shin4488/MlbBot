@@ -44,7 +44,7 @@ namespace TwitterMlbBot.Mlb
         /// <summary>
         /// Stats APIのレスポンスからシーズン日程を取り出す
         /// </summary>
-        internal static SeasonCalendar ParseSeasonCalendar(string responseBody, int year)
+        private static SeasonCalendar ParseSeasonCalendar(string responseBody, int year)
         {
             SeasonsResponse parsed;
             try

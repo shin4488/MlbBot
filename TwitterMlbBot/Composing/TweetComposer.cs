@@ -27,45 +27,28 @@ namespace TwitterMlbBot.Composing
             this.hashtagProvider = hashtagProvider;
         }
 
+        /// <summary>
+        /// 全チームの成績から、対象グループの地区とワイルドカードの文面を投稿順に作る
+        /// </summary>
+        /// <param name="standings">全チームの成績（並び順は問わない）</param>
+        /// <param name="date">文面のヘッダに表示する日付</param>
+        /// <returns>投稿順の文面（成績が空の場合は空リスト）</returns>
         public IReadOnlyList<TweetContent> ComposeTweets(IReadOnlyList<TeamStanding> standings, DateOnly date, PostingGroup group)
         {
             IReadOnlyList<DivisionStanding> divisions = DivisionStanding.FromStandings(standings);
-            IReadOnlyList<DivisionStanding> selectedDivisions = divisions
-                .Where(division => division.Division == group.ToString()).ToList();
-            List<TweetContent> tweets = new(Compose(selectedDivisions, date));
+            List<TweetContent> tweets = divisions
+                .Where(division => division.Division == group.ToString())
+                .Select(division => ComposeDivisionTweet(division, date))
+                .ToList();
             bool shouldIncludeWildCards = group == PostingGroup.West && date.Month >= PlayoffRaceStartMonth;
             if (shouldIncludeWildCards)
             {
                 // WCは対象地区に絞る前の全地区から計算し、地区投稿の後に追加する
-                IReadOnlyList<WildCardStanding> wildCards = WildCardStanding.FromDivisions(divisions);
-                tweets.AddRange(ComposeWildCards(wildCards, date));
+                tweets.AddRange(WildCardStanding.FromDivisions(divisions)
+                    .Select(wildCard => ComposeWildCardTweet(wildCard, date)));
             }
             // 投稿中に文面リストの追加・削除が起きないよう、完成したリストは変更不可にする
             return tweets.AsReadOnly();
-        }
-
-        /// <summary>
-        /// 地区順位表をツイート文面リストに変換する
-        /// </summary>
-        /// <param name="divisions">地区ごとの順位表</param>
-        /// <param name="date">文面のヘッダに表示する日付。日付が入り毎日本文が変わることで、
-        /// 順位が動かない日でもX APIの重複コンテンツ判定（403）を回避できる</param>
-        /// <returns>地区ごとのツイート文面（順位表が空の場合は空リスト）</returns>
-        public IReadOnlyList<TweetContent> Compose(IReadOnlyList<DivisionStanding> divisions, DateOnly date)
-        {
-            return divisions
-                .Select(division => ComposeDivisionTweet(division, date))
-                .ToList().AsReadOnly();
-        }
-
-        /// <summary>
-        /// ワイルドカード順位表をツイート文面リストに変換する
-        /// </summary>
-        public IReadOnlyList<TweetContent> ComposeWildCards(IReadOnlyList<WildCardStanding> wildCards, DateOnly date)
-        {
-            return wildCards
-                .Select(wildCard => ComposeWildCardTweet(wildCard, date))
-                .ToList().AsReadOnly();
         }
 
         private TweetContent ComposeDivisionTweet(DivisionStanding division, DateOnly date)
@@ -117,6 +100,7 @@ namespace TwitterMlbBot.Composing
 
         private static void AppendHeader(StringBuilder buffer, DateOnly date, string title)
         {
+            // 日付を入れて毎日本文を変え、順位が動かない日でもX APIの重複コンテンツ判定（403）を避ける。
             // 凡例（W-L (GB)）をヘッダ行に同居させ、数字の意味を示しつつ行数を抑える。
             // 読者は英語圏想定のため文面は英語で統一
             buffer
