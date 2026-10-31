@@ -23,7 +23,7 @@ public class ApiSafetyTest
         using var request = new HttpRequestMessage(HttpMethod.Get, server.Address);
         request.Headers.Add("Ocp-Apim-Subscription-Key", "dummy-key");
 
-        using var response = await client.SendAsync(request);
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal(1, server.RequestCount);
@@ -35,7 +35,7 @@ public class ApiSafetyTest
         await using var server = new LoopbackServer(redirect: false);
         using var client = ApiHttpClientFactory.Create();
 
-        await Assert.ThrowsAnyAsync<Exception>(() => client.GetAsync(server.Address));
+        await Assert.ThrowsAnyAsync<Exception>(() => client.GetAsync(server.Address, TestContext.Current.CancellationToken));
     }
 
     [Theory]
