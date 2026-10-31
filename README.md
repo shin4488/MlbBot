@@ -5,7 +5,7 @@
 
 ## 概要とアーキテクチャ
 
-AWS EventBridge Scheduler により、East / Central / West の各グループの代表タイムゾーンで朝 07:00 に AWS Lambda が起動され、ア・リーグとナ・リーグの該当地区の順位表を自動投稿します。文面に表示する日付（各グループの代表タイムゾーンでの実行日の前日）が8月以降の場合は、West の実行でワイルドカード順位もあわせて投稿します。地区優勝が確定したチームには勝敗の後に `🏆`、ワイルドカード進出が確定したチームには `✅` を順位行に表示します。ワイルドカードの区切り線は、その時点の順位での圏内と圏外の境界を示します。
+AWS EventBridge Scheduler が、East / Central / West の各グループの代表タイムゾーンの朝 07:00 に AWS Lambda を起動し、ア・リーグとナ・リーグの該当地区の順位表を投稿します。文面に表示する日付（各グループの代表タイムゾーンでの実行日の前日）が8月以降の場合は、West の実行でワイルドカード順位もあわせて投稿します。地区優勝が確定したチームには勝敗の後に `🏆`、ワイルドカード進出が確定したチームには `✅` を順位行に表示します。ワイルドカードの区切り線は、その時点の順位での圏内と圏外の境界を示します。
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,7 @@ flowchart LR
 
 ## ローカルでの実行（ドライラン）
 
-X への実投稿を行わず、生成される投稿文面をコンソールに出力するドライランモードが用意されています。
+ドライランでは、X へ投稿せずに投稿文面をコンソールに出力します。
 
 ### 前提条件
 - [global.json](global.json) で指定した .NET SDK
@@ -81,4 +81,4 @@ dotnet format MlbBot.sln
 
 ## デプロイ
 
-`master` ブランチへのプルリクエストマージをトリガーに、GitHub Actions がビルド・テストを実行し、OIDC 認証経由で AWS Lambda へ自動デプロイを行います。Markdown やインフラ定義など、関数コードに影響しないファイルだけの変更ではデプロイしません（対象外のパスは [lambda_deploy.yml](.github/workflows/lambda_deploy.yml) の `paths-ignore`）。
+プルリクエストを `master` ブランチにマージすると、GitHub Actions がビルド・テストを実行し、OIDC 認証で AWS Lambda へデプロイします。Markdown やインフラ定義など、関数コードに影響しないファイルだけの変更ではデプロイしません（対象外のパスは [lambda_deploy.yml](.github/workflows/lambda_deploy.yml) の `paths-ignore`）。
