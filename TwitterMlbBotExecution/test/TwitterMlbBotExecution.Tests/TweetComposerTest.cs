@@ -339,17 +339,15 @@ public class TweetComposerTest
     [Fact]
     public void ComposeTweets_地区の文面はXの文字数上限280字以内に収まる()
     {
-        // 実在の公式タグマップを意図的に使う数少ないテスト:
-        // 「長いチーム名 + 長い公式タグ」の組み合わせが上限を超えないことの回帰検証で、
-        // タグマップの変更（毎シーズンありうる）で文字数超過が起きたらここで検出する
-        // 勝敗は各行の文字数が最大になる組み合わせ（3桁の勝ち数、11.5のような2桁で小数付きのゲーム差）にする
+        // 勝敗は、首位を3桁の勝ち数、2位以下を11.5のような2桁で小数付きのゲーム差にする
+        string[] names = LongestTeamNames(5);
         var standings = new List<TeamStanding>
         {
-            new TeamStanding("Diamondbacks", "NL", "Central", 100, 62, clinchedDivision: true),
-            Teams.Create("NL", "Central", "Blue Jays", 89, 74),
-            Teams.Create("NL", "Central", "Guardians", 88, 75),
-            Teams.Create("NL", "Central", "Nationals", 87, 76),
-            Teams.Create("NL", "Central", "Twins", 86, 77),
+            new TeamStanding(names[0], "NL", "Central", 100, 62, clinchedDivision: true),
+            Teams.Create("NL", "Central", names[1], 89, 74),
+            Teams.Create("NL", "Central", names[2], 88, 75),
+            Teams.Create("NL", "Central", names[3], 87, 76),
+            Teams.Create("NL", "Central", names[4], 86, 77),
         };
 
         var tweet = Assert.Single(ComposeCentralTweets(standings));
@@ -360,19 +358,42 @@ public class TweetComposerTest
     [Fact]
     public void ComposeTweets_進出確定表示を含むワイルドカードの文面はXの文字数上限内に収まる()
     {
+        string[] names = LongestTeamNames(6);
         var standings = new List<TeamStanding>
         {
-            new("Yankees", "AL", "East", 110, 52, clinchedDivision: true),
-            new("Diamondbacks", "AL", "East", 100, 62, clinchedWildCard: true),
-            new("Blue Jays", "AL", "East", 99, 63, clinchedWildCard: true),
-            new("Guardians", "AL", "East", 98, 64, clinchedWildCard: true),
-            new("Nationals", "AL", "East", 97, 65),
-            new("Mariners", "AL", "East", 96, 66),
-            new("White Sox", "AL", "East", 95, 67),
+            // 地区首位はワイルドカードの文面に載らない
+            new("Leader", "AL", "East", 110, 52, clinchedDivision: true),
+            new(names[0], "AL", "East", 100, 62, clinchedWildCard: true),
+            new(names[1], "AL", "East", 99, 63, clinchedWildCard: true),
+            new(names[2], "AL", "East", 98, 64, clinchedWildCard: true),
+            new(names[3], "AL", "East", 97, 65),
+            new(names[4], "AL", "East", 96, 66),
+            new(names[5], "AL", "East", 95, 67),
         };
 
         TweetContent tweet = ComposeWildCardTweet(standings);
 
         Assert.False(tweet.ExceedsCharacterLimit, $"文面が上限を超えている: {tweet.CharacterCount}字");
+    }
+
+    /// <summary>
+    /// 実際の公式タグ表の30球団から、文面が最も長くなる球団名を上位から順に返す。
+    /// タグが付く上位2球団は球団名とタグを合わせて最も長い球団、残りは球団名が最も長い球団にする。
+    /// タグ表の変更（毎シーズンありうる）で文面が上限を超えたら、文字数のテストで検出できる
+    /// </summary>
+    private static string[] LongestTeamNames(int count)
+    {
+        var hashtagProvider = new HashtagProvider();
+        string[] taggedTeams = HashtagProvider.OfficialHashtagMap.Keys
+            .OrderByDescending(name => name.Length + hashtagProvider.GetHashtags(name).Length)
+            .ThenBy(name => name, StringComparer.Ordinal)
+            .Take(2)
+            .ToArray();
+        IEnumerable<string> otherTeams = HashtagProvider.OfficialHashtagMap.Keys
+            .Except(taggedTeams)
+            .OrderByDescending(name => name.Length)
+            .ThenBy(name => name, StringComparer.Ordinal)
+            .Take(count - taggedTeams.Length);
+        return [.. taggedTeams, .. otherTeams];
     }
 }
