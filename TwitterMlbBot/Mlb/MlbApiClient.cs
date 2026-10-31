@@ -48,7 +48,7 @@ namespace TwitterMlbBot.Mlb
         /// <summary>
         /// APIレスポンスからチーム成績を取り出す。All-Star用の擬似チームはここで除外し、ドメインには渡さない
         /// </summary>
-        internal static IReadOnlyList<TeamStanding> ParseStandings(int year, string responseBody)
+        private static IReadOnlyList<TeamStanding> ParseStandings(int year, string responseBody)
         {
             List<StandingResponse?> parsed;
             try
